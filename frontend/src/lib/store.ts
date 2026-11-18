@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { api, tokens } from "@/api/client";
+import { api, tokens, getApiBaseUrl, setApiBaseUrl } from "@/api/client";
 
 export type Status = "Contacted" | "Replied" | "Interview" | "Offer" | "Rejected";
 export const STATUSES: Status[] = ["Contacted", "Replied", "Interview", "Offer", "Rejected"];
@@ -16,7 +16,20 @@ export interface Toast { id: string; msg: string; type: "ok" | "err" }
 export interface ResumeVersion { id: string; label: string; at: string; ats: number; text: string }
 export interface Draft { to: string; subject: string; body: string }
 
-export interface S { user: { name: string; email: string } | null; contacts: Contact[]; threads: Thread[]; templates: Template[]; apps: App[]; accounts: Account[]; profile: Profile; prefs: Prefs; toasts: Toast[]; dark: boolean; resumes: ResumeVersion[]; draft: Draft | null }
+export interface S {
+  user: { name: string; email: string } | null;
+  contacts: Contact[];
+  threads: Thread[];
+  templates: Template[];
+  apps: App[];
+  accounts: Account[];
+  profile: Profile;
+  prefs: Prefs;
+  toasts: Toast[];
+  dark: boolean;
+  resumes: ResumeVersion[];
+  draft: Draft | null;
+}
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -66,6 +79,7 @@ export const fill = (t: string, v: Record<string, string>) => t.replace(/{{(\w+)
 
 export const isMockMode = () => import.meta.env.VITE_USE_MOCK === "true";
 
+// --- Auth ---
 export async function login(email: string, password?: string) {
   if (isMockMode()) {
     set(() => ({ user: { name: email.split("@")[0], email } }));
@@ -93,8 +107,18 @@ export async function signup(email: string, password: string, name: string, org?
   await loadInitialData();
 }
 
+export function logout() {
+  tokens.clear();
+  if (sseSource) {
+    sseSource.close();
+    sseSource = null;
+  }
+  set(() => emptyState());
+}
+
+// --- Data Hydration ---
 export async function loadInitialData() {
-  if (isMockMode()) return;
+  if (isMockMode() || !tokens.access) return;
   try {
     const [meRes, contactsRes, threadsRes, tplsRes, appsRes, accsRes, profRes, settingsRes, resumesRes] = await Promise.allSettled([
       api.get("/auth/me"),
@@ -105,7 +129,7 @@ export async function loadInitialData() {
       api.get("/accounts"),
       api.get("/profile"),
       api.get("/settings"),
-      api.get("/resumes"),
+      api.get("/ai/resumes"),
     ]);
 
     set((s) => ({
@@ -122,19 +146,15 @@ export async function loadInitialData() {
 
     setupSSE();
   } catch (e) {
-    console.warn("Failed loading backend data, using current state", e);
+    console.warn("Failed loading backend data", e);
   }
-}
-
-if (typeof window !== "undefined" && tokens.access) {
-  loadInitialData();
 }
 
 let sseSource: EventSource | null = null;
 function setupSSE() {
   if (sseSource || isMockMode() || !tokens.access) return;
   try {
-    const sseUrl = `${api.defaults.baseURL}/events?token=${tokens.access}`;
+    const sseUrl = `${getApiBaseUrl()}/events?token=${tokens.access}`;
     sseSource = new EventSource(sseUrl);
 
     sseSource.addEventListener("reply.received", (e) => {
@@ -168,20 +188,16 @@ function setupSSE() {
   } catch {}
 }
 
-export function logout() {
-  tokens.clear();
-  if (sseSource) {
-    sseSource.close();
-    sseSource = null;
-  }
-  set(() => ({ user: null }));
+if (typeof window !== "undefined" && tokens.access) {
+  loadInitialData();
 }
 
 export function toggleDark() { const d = !state.dark; document.documentElement.classList.toggle("dark", d); set(() => ({ dark: d })); }
 
 const sentToday = () => state.threads.flatMap((t) => t.messages).filter((m) => m.dir === "out" && Date.now() - +new Date(m.at) < 864e5).length;
 
-export function sendEmail(to: string, subject: string, body: string, threadId?: string): boolean {
+// --- Email Sending ---
+export function sendEmail(to: string, subject: string, body: string, threadId?: string, attachmentIds?: string[]): boolean {
   const addr = to.trim().toLowerCase();
   if (!addr) { toast("Add a recipient", "err"); return false; }
   if (state.prefs.dnc.map((d) => d.toLowerCase()).includes(addr)) { toast(`${addr} is on your do-not-contact list`, "err"); return false; }
@@ -198,7 +214,13 @@ export function sendEmail(to: string, subject: string, body: string, threadId?: 
   set(() => ({ contacts, threads }));
 
   if (!isMockMode()) {
-    api.post("/emails/send", { to: addr, subject, body, threadId: tid })
+    api.post("/emails/send", {
+      to: addr,
+      subject,
+      body,
+      threadId: tid,
+      attachmentIds: attachmentIds || []
+    })
       .then((res) => {
         set((s) => ({
           threads: s.threads.map((t) => (t.id !== tid ? t : {
@@ -255,9 +277,214 @@ export function simulateReply() {
   toast(`New reply from ${c.name}`);
 }
 
-export const setContactStatus = (id: string, status: Status) => {
-  if (!isMockMode()) {
-    api.patch(`/contacts/${id}/status`, { status }).catch(() => {});
+// --- Contacts CRUD ---
+export async function createContact(data: { name: string; email: string; company: string; status?: Status }) {
+  if (isMockMode()) {
+    set((s) => ({ contacts: [...s.contacts, { id: uid(), ...data, status: data.status || "Contacted", createdAt: new Date().toISOString() }] }));
+    toast("Contact added");
+    return;
   }
+  try {
+    const res = await api.post("/contacts", data);
+    set((s) => ({ contacts: [...s.contacts, res.data] }));
+    toast("Contact added");
+  } catch (err: any) {
+    toast(err.response?.data?.error?.message || "Failed to add contact", "err");
+  }
+}
+
+export const setContactStatus = async (id: string, status: Status) => {
   set((s) => ({ contacts: s.contacts.map((c) => (c.id === id ? { ...c, status } : c)) }));
+  if (!isMockMode()) {
+    try {
+      await api.patch(`/contacts/${id}/status`, { status });
+    } catch {}
+  }
 };
+
+export async function deleteContact(id: string) {
+  set((s) => ({ contacts: s.contacts.filter((c) => c.id !== id) }));
+  if (!isMockMode()) {
+    try {
+      await api.delete(`/contacts/${id}`);
+      toast("Contact deleted");
+    } catch {}
+  }
+}
+
+// --- Applications CRUD ---
+export async function createApplication(data: { title: string; company: string; jdUrl?: string; jd?: string; contactId?: string; resume?: string }) {
+  if (isMockMode()) {
+    const a: App = { id: uid(), ...data, jd: data.jd || "", jdUrl: data.jdUrl || "", contactId: data.contactId || "", resume: data.resume || "", status: "Saved", timeline: [{ at: new Date().toISOString(), label: "Saved" }] };
+    set((s) => ({ apps: [a, ...s.apps] }));
+    toast("Application saved");
+    return;
+  }
+  try {
+    const res = await api.post("/applications", data);
+    set((s) => ({ apps: [res.data, ...s.apps] }));
+    toast("Application saved");
+  } catch (err: any) {
+    toast(err.response?.data?.error?.message || "Failed to save application", "err");
+  }
+}
+
+export async function setApplicationStatus(id: string, status: App["status"]) {
+  set((s) => ({
+    apps: s.apps.map((a) => (a.id === id ? {
+      ...a,
+      status,
+      timeline: [...a.timeline, { at: new Date().toISOString(), label: status }]
+    } : a))
+  }));
+  if (!isMockMode()) {
+    try {
+      await api.patch(`/applications/${id}/status`, { status });
+    } catch {}
+  }
+}
+
+// --- Templates CRUD ---
+export async function saveTemplate(t: { id?: string; name: string; subject: string; body: string }) {
+  if (isMockMode()) {
+    const isExisting = state.templates.some((x) => x.id === t.id);
+    const updated: Template = { id: t.id || uid(), name: t.name, subject: t.subject, body: t.body, global: false };
+    set((s) => ({
+      templates: isExisting ? s.templates.map((x) => (x.id === t.id ? updated : x)) : [...s.templates, updated]
+    }));
+    toast("Template saved");
+    return;
+  }
+  try {
+    if (t.id && state.templates.some((x) => x.id === t.id && !x.global)) {
+      const res = await api.put(`/templates/${t.id}`, { name: t.name, subject: t.subject, body: t.body });
+      set((s) => ({ templates: s.templates.map((x) => (x.id === t.id ? res.data : x)) }));
+    } else {
+      const res = await api.post("/templates", { name: t.name, subject: t.subject, body: t.body });
+      set((s) => ({ templates: [...s.templates, res.data] }));
+    }
+    toast("Template saved");
+  } catch (err: any) {
+    toast(err.response?.data?.error?.message || "Failed to save template", "err");
+  }
+}
+
+export async function cloneTemplate(id: string) {
+  if (isMockMode()) {
+    const t = state.templates.find((x) => x.id === id);
+    if (t) {
+      set((s) => ({ templates: [...s.templates, { ...t, id: uid(), name: `${t.name} (copy)`, global: false }] }));
+      toast("Template cloned");
+    }
+    return;
+  }
+  try {
+    const res = await api.post(`/templates/${id}/clone`);
+    set((s) => ({ templates: [...s.templates, res.data] }));
+    toast("Template cloned");
+  } catch (err: any) {
+    toast(err.response?.data?.error?.message || "Failed to clone template", "err");
+  }
+}
+
+export async function deleteTemplate(id: string) {
+  set((s) => ({ templates: s.templates.filter((x) => x.id !== id) }));
+  if (!isMockMode()) {
+    try {
+      await api.delete(`/templates/${id}`);
+      toast("Template deleted");
+    } catch (err: any) {
+      toast(err.response?.data?.error?.message || "Failed to delete template", "err");
+    }
+  }
+}
+
+// --- Profile & Settings ---
+export async function saveProfile(p: Profile) {
+  set(() => ({ profile: p }));
+  if (!isMockMode()) {
+    try {
+      await api.put("/profile", p);
+      toast("Profile saved");
+    } catch (err: any) {
+      toast(err.response?.data?.error?.message || "Failed to save profile", "err");
+    }
+  } else {
+    toast("Profile saved");
+  }
+}
+
+export async function savePrefs(patch: Partial<Prefs>) {
+  const newPrefs = { ...state.prefs, ...patch };
+  set(() => ({ prefs: newPrefs }));
+  if (!isMockMode()) {
+    try {
+      await api.put("/settings", patch);
+      toast("Settings updated");
+    } catch (err: any) {
+      toast(err.response?.data?.error?.message || "Failed to update settings", "err");
+    }
+  } else {
+    toast("Settings updated");
+  }
+}
+
+export async function addDnc(email: string) {
+  const clean = email.trim().toLowerCase();
+  if (!clean) return;
+  set((s) => ({ prefs: { ...s.prefs, dnc: [...s.prefs.dnc, clean] } }));
+  if (!isMockMode()) {
+    try {
+      await api.post("/settings/dnc", { email: clean });
+      toast("Added to Do-Not-Contact list");
+    } catch {}
+  }
+}
+
+export async function removeDnc(email: string) {
+  set((s) => ({ prefs: { ...s.prefs, dnc: s.prefs.dnc.filter((d) => d !== email) } }));
+  if (!isMockMode()) {
+    try {
+      await api.delete(`/settings/dnc/${encodeURIComponent(email)}`);
+      toast("Removed from Do-Not-Contact list");
+    } catch {}
+  }
+}
+
+// --- Mailbox Account Actions ---
+export async function syncMailbox(accountId: string) {
+  toast("Syncing emails...");
+  if (!isMockMode()) {
+    try {
+      const res = await api.post(`/accounts/${accountId}/sync`);
+      toast(`Sync complete: ${res.data?.synced ?? 0} new messages`);
+      await loadInitialData();
+    } catch (err: any) {
+      toast(err.response?.data?.error?.message || "Sync failed", "err");
+    }
+  } else {
+    setTimeout(() => toast("Sync complete"), 1000);
+  }
+}
+
+export async function deleteMailbox(accountId: string) {
+  set((s) => ({ accounts: s.accounts.filter((a) => a.id !== accountId) }));
+  if (!isMockMode()) {
+    try {
+      await api.delete(`/accounts/${accountId}`);
+      toast("Mailbox disconnected");
+    } catch {}
+  } else {
+    toast("Mailbox disconnected");
+  }
+}
+
+export async function setDefaultMailbox(accountId: string) {
+  set((s) => ({ accounts: s.accounts.map((a) => ({ ...a, isDefault: a.id === accountId })) }));
+  if (!isMockMode()) {
+    try {
+      await api.patch(`/accounts/${accountId}/default`);
+      toast("Default mailbox updated");
+    } catch {}
+  }
+}

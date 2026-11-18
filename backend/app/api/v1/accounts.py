@@ -12,6 +12,7 @@ from app.schemas.domain import (
     ImapTestRequest,
 )
 from app.services.account_service import AccountService
+from app.services.sync_service import SyncService
 
 router = APIRouter(prefix="/accounts", tags=["Email Accounts"])
 
@@ -53,7 +54,9 @@ async def oauth_callback(
     tenant_id = state
     await AccountService.handle_oauth_callback(provider, code, tenant_id)
     # Redirect back to frontend settings page
-    return RedirectResponse(url="http://localhost:5173/settings")
+    settings_obj = get_settings()
+    frontend_url = settings_obj.cors_list[0] if settings_obj.cors_list else "http://localhost:5173"
+    return RedirectResponse(url=f"{frontend_url}/settings")
 
 
 @router.post("/imap/test")
@@ -143,3 +146,16 @@ async def delete_account(
     await repo.delete(account_id)
     await audit.log_action("disconnect_mailbox", user_id=user.id, target_type="account", target_id=account_id)
     return {"status": "ok", "deleted": True}
+
+
+@router.post("/{account_id}/sync")
+async def sync_account_now(
+    account_id: str,
+    repo: AccountRepo = Depends(get_account_repo),
+):
+    """Trigger on-demand email sync for account."""
+    acc = await repo.get_by_id(account_id)
+    if not acc:
+        raise NotFoundError("Account not found")
+    count = await SyncService.sync_account(acc)
+    return {"status": "ok", "synced": count}
