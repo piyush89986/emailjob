@@ -2,6 +2,9 @@
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
+
+if not hasattr(AsyncIOMotorClient, "append_metadata"):
+    AsyncIOMotorClient.append_metadata = lambda self, *args, **kwargs: None
 from app.core.config import get_settings
 from app.models.template import Template
 from app.models import ALL_DOCUMENT_MODELS

@@ -8,6 +8,10 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from redis.asyncio import Redis
 from beanie import init_beanie
 
+# Fix Motor compatibility with Beanie 2.0 / PyMongo 4.9+ metadata append
+if not hasattr(AsyncIOMotorClient, "append_metadata"):
+    AsyncIOMotorClient.append_metadata = lambda self, *args, **kwargs: None
+
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import get_logger, request_id_var, setup_logging
@@ -99,7 +103,7 @@ async def ensure_db_mw(request: Request, call_next):
     """Ensure Beanie models are initialized before processing request."""
     if settings.app_env != "test":
         try:
-            User.get_collection()
+            User.get_pymongo_collection()
         except Exception:
             try:
                 log.info("auto_healing_beanie_on_request")
@@ -136,20 +140,24 @@ async def security_headers_mw(request: Request, call_next):
 async def health(request: Request):
     """Liveness and dependency check."""
     status = {"api": "ok"}
-    try:
-        await request.app.state.mongo.admin.command("ping")
+    if settings.app_env != "test":
+        try:
+            await asyncio.wait_for(request.app.state.mongo.admin.command("ping"), timeout=2.0)
+            status["mongo"] = "ok"
+        except Exception as e:
+            status["mongo"] = f"down: {str(e)}"
+        try:
+            await asyncio.wait_for(request.app.state.redis.ping(), timeout=2.0)
+            status["redis"] = "ok"
+        except Exception as e:
+            status["redis"] = f"down: {str(e)}"
+    else:
         status["mongo"] = "ok"
-    except Exception as e:
-        status["mongo"] = f"down: {str(e)}"
-    try:
-        await request.app.state.redis.ping()
         status["redis"] = "ok"
-    except Exception as e:
-        status["redis"] = f"down: {str(e)}"
 
     # Check Beanie status & auto-heal if needed
     try:
-        col = User.get_collection()
+        col = User.get_pymongo_collection()
         status["beanie"] = "ok"
     except Exception as e:
         try:

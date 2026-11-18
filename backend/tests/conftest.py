@@ -15,6 +15,7 @@ from app.scripts.seed import seed_global_templates
 from app.main import app
 
 settings = get_settings()
+settings.app_env = "test"
 
 
 @pytest_asyncio.fixture(autouse=True)

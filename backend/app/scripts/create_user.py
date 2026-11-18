@@ -15,6 +15,9 @@ if backend_dir not in sys.path:
 
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
+
+if not hasattr(AsyncIOMotorClient, "append_metadata"):
+    AsyncIOMotorClient.append_metadata = lambda self, *args, **kwargs: None
 from app.core.config import get_settings
 from app.core.security import get_password_hash
 from app.models import ALL_DOCUMENT_MODELS
