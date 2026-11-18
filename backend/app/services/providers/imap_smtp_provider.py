@@ -175,7 +175,7 @@ class ImapSmtpProvider(EmailProvider):
                             "from": sender,
                             "to": [parsed_msg.get("To", "")],
                             "subject": subj,
-                            "body": body_content[:500],
+                            "body": body_content,
                             "date": parsed_msg.get("Date"),
                             "in_reply_to": in_reply_to,
                             "references": refs,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { markRead, retrySend, sendEmail, simulateReply, threadState, useS, loadInitialData, syncMailbox } from "@/lib/store";
 import { Badge, Empty, fmt, Page, Skeleton, strip, useReady } from "@/components/ui";
 
@@ -12,6 +12,7 @@ export default function Inbox() {
   const [sel, setSel] = useState<string | null>(null);
   const [reply, setReply] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const list = threads.filter(
     (t) =>
@@ -20,6 +21,13 @@ export default function Inbox() {
   );
   const cur = threads.find((t) => t.id === sel);
   const contact = cur && contacts.find((c) => c.id === cur.contactId);
+
+  // Auto-scroll to bottom of conversation when thread changes or new message arrives
+  useEffect(() => {
+    if (sel && cur?.messages?.length) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [sel, cur?.messages.length]);
 
   // Auto-select first thread on desktop if none selected
   useEffect(() => {
@@ -190,6 +198,7 @@ export default function Inbox() {
                     )}
                   </div>
                 ))}
+                <div ref={messagesEndRef} />
               </div>
 
               {/* Reply section: pinned at bottom */}

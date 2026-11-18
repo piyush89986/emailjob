@@ -5,6 +5,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from email.utils import make_msgid, formatdate
+import html
 import json
 from typing import Any, Dict, List, Optional, Tuple
 import httpx
@@ -160,12 +161,56 @@ class GmailProvider(EmailProvider):
 
         return messages, new_cursor
 
+    @staticmethod
+    def _extract_body_from_payload(payload: dict) -> str:
+        """Extract full HTML or plain-text body from Gmail message payload, handling nested multiparts."""
+        html_parts: List[str] = []
+        text_parts: List[str] = []
+
+        def walk(part: dict):
+            # Check disposition - skip attachments
+            disposition = ""
+            for h in part.get("headers", []):
+                if h.get("name", "").lower() == "content-disposition":
+                    disposition = h.get("value", "").lower()
+            if "attachment" in disposition:
+                return
+
+            mime = part.get("mimeType", "").lower()
+            body_obj = part.get("body", {})
+            data_str = body_obj.get("data")
+
+            if data_str:
+                try:
+                    padded = data_str + "=" * ((4 - len(data_str) % 4) % 4)
+                    decoded = base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8", errors="replace")
+                    if "text/html" in mime:
+                        html_parts.append(decoded)
+                    elif "text/plain" in mime:
+                        text_parts.append(decoded)
+                except Exception:
+                    pass
+
+            for sub in part.get("parts", []):
+                walk(sub)
+
+        walk(payload)
+
+        if html_parts:
+            return "".join(html_parts)
+        if text_parts:
+            raw_text = "\n".join(text_parts)
+            escaped = html.escape(raw_text)
+            return escaped.replace("\r\n", "<br>").replace("\n", "<br>")
+        return ""
+
     async def _fetch_message(self, client: httpx.AsyncClient, headers: dict, mid: str) -> Optional[Dict[str, Any]]:
-        resp = await client.get(f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{mid}?format=metadata", headers=headers)
+        resp = await client.get(f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{mid}?format=full", headers=headers)
         if resp.status_code != 200:
             return None
         data = resp.json()
-        headers_map = {h["name"].lower(): h["value"] for h in data.get("payload", {}).get("headers", [])}
+        payload = data.get("payload", {})
+        headers_map = {h["name"].lower(): h["value"] for h in payload.get("headers", [])}
 
         from_str = headers_map.get("from", "")
         subject = headers_map.get("subject", "")
@@ -183,6 +228,10 @@ class GmailProvider(EmailProvider):
 
         kind = "bounce" if is_bounce else ("auto" if is_auto else "normal")
 
+        full_body = self._extract_body_from_payload(payload)
+        if not full_body:
+            full_body = data.get("snippet", "")
+
         return {
             "provider_message_id": mid,
             "provider_thread_id": data.get("threadId"),
@@ -190,7 +239,7 @@ class GmailProvider(EmailProvider):
             "from": from_str,
             "to": [headers_map.get("to", "")],
             "subject": subject,
-            "body": data.get("snippet", ""),
+            "body": full_body,
             "date": headers_map.get("date"),
             "in_reply_to": in_reply_to,
             "references": refs,

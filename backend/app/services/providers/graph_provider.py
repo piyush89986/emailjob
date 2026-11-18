@@ -120,7 +120,7 @@ class GraphProvider(EmailProvider):
                     sender = item.get("from", {}).get("emailAddress", {}).get("address", "")
                     subj = item.get("subject", "")
                     mid = item.get("id", "")
-                    body_preview = item.get("bodyPreview", "")
+                    full_body = item.get("body", {}).get("content") or item.get("bodyPreview", "")
 
                     is_bounce = "mailer-daemon" in sender.lower() or "postmaster" in sender.lower() or "undeliverable" in subj.lower()
                     kind = "bounce" if is_bounce else "normal"
@@ -132,7 +132,7 @@ class GraphProvider(EmailProvider):
                         "from": sender,
                         "to": [r.get("emailAddress", {}).get("address", "") for r in item.get("toRecipients", [])],
                         "subject": subj,
-                        "body": body_preview,
+                        "body": full_body,
                         "date": item.get("receivedDateTime"),
                         "in_reply_to": None,
                         "references": [],

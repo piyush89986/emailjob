@@ -1,6 +1,7 @@
 """Inbound email synchronization, deduplication, thread matching, and classification."""
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+import httpx
 from app.core.events import publish_event
 from app.core.logging import get_logger
 from app.models.account import EmailAccount
@@ -40,6 +41,23 @@ class SyncService:
             if created:
                 synced_count += 1
 
+        # Re-fetch full body for any existing inbound messages that only have short snippets
+        try:
+            msg_repo = MessageRepo(tenant_id)
+            existing_inbound = await msg_repo.find_all(Message.email_account_id == account.id, Message.dir == "in")
+            async with httpx.AsyncClient() as client:
+                token = await provider._ensure_token(client) if hasattr(provider, "_ensure_token") else None
+                if token and hasattr(provider, "_fetch_message"):
+                    h = {"Authorization": f"Bearer {token}"}
+                    for m in existing_inbound:
+                        if m.provider_message_id and len(m.body or "") < 250:
+                            detail = await provider._fetch_message(client, h, m.provider_message_id)
+                            if detail and detail.get("body") and len(detail["body"]) > len(m.body or ""):
+                                await msg_repo.update(m.id, body=detail["body"])
+                                log.info("rehydrated_full_message_body", message_id=m.id, length=len(detail["body"]))
+        except Exception as ex:
+            log.warning("rehydrate_snippets_failed", error=str(ex))
+
         # Update cursor and last_synced_at
         acc_repo = AccountRepo(tenant_id)
         await acc_repo.update(
@@ -59,10 +77,16 @@ class SyncService:
         if not p_mid:
             return None
 
+        body = item.get("body", "")
+
         msg_repo = MessageRepo(tenant_id)
         # 1. Deduplication check on {email_account_id, provider_message_id}
         existing = await msg_repo.find_by_provider_message_id(account.id, p_mid)
         if existing:
+            # If the existing message only had a short snippet, update it with the full body
+            if body and len(body) > len(existing.body or ""):
+                await msg_repo.update(existing.id, body=body)
+                log.info("existing_message_body_updated", message_id=existing.id, len=len(body))
             return None  # Already processed
 
         sender_email = item.get("from", "").strip()
