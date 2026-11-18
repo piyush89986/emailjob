@@ -2,6 +2,22 @@ import { useState } from "react";
 import { setContactStatus, createContact, deleteContact, useS, STATUSES, Status, toast } from "@/lib/store";
 import { Badge, Empty, fmt, Page, Skeleton, Tabs, useReady } from "@/components/ui";
 
+function StatusSelect({ id, v }: { id: string; v: Status }) {
+  return (
+    <select
+      className="input w-auto py-1 text-xs"
+      value={v}
+      onChange={(e) => setContactStatus(id, e.target.value as Status)}
+    >
+      {STATUSES.map((s) => (
+        <option key={s} value={s}>
+          {s}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export default function Contacts() {
   const ready = useReady();
   const contacts = useS((s) => s.contacts);
@@ -18,20 +34,6 @@ export default function Contacts() {
     });
     setF({ name: "", email: "", company: "" });
   };
-
-  const Sel = ({ id, v }: { id: string; v: Status }) => (
-    <select
-      className="input w-auto py-1 text-xs"
-      value={v}
-      onChange={(e) => setContactStatus(id, e.target.value as Status)}
-    >
-      {STATUSES.map((s) => (
-        <option key={s} value={s}>
-          {s}
-        </option>
-      ))}
-    </select>
-  );
 
   return (
     <Page title="Contacts">
@@ -86,7 +88,7 @@ export default function Contacts() {
                   <td>{c.company}</td>
                   <td>{c.email}</td>
                   <td>
-                    <Sel id={c.id} v={c.status} />
+                    <StatusSelect id={c.id} v={c.status} />
                   </td>
                   <td>{fmt(c.lastRepliedAt)}</td>
                   <td className="text-right p-2">
@@ -120,7 +122,7 @@ export default function Contacts() {
                       <div className="font-medium">{c.name}</div>
                       <div className="text-xs text-slate-500">{c.company}</div>
                       <div className="mt-2 flex items-center justify-between">
-                        <Sel id={c.id} v={c.status} />
+                        <StatusSelect id={c.id} v={c.status} />
                         <button
                           className="text-xs text-red-600"
                           onClick={() => deleteContact(c.id)}

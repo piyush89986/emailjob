@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Exp, Profile, saveProfile, set, toast, uid, useS } from "@/lib/store";
 import { tailorResume } from "@/lib/ai";
 import { api } from "@/api/client";
@@ -6,62 +6,122 @@ import { Page, Tabs } from "@/components/ui";
 
 type Result = ReturnType<typeof tailorResume>;
 
+function ExpItem({
+  item,
+  onUpdate,
+  onRemove,
+}: {
+  item: Exp;
+  onUpdate: (patch: Partial<Exp>) => void;
+  onRemove: () => void;
+}) {
+  const [bulletsText, setBulletsText] = useState(item.bullets.join("\n"));
+
+  useEffect(() => {
+    setBulletsText(item.bullets.join("\n"));
+  }, [item.id]);
+
+  const handleBulletsChange = (val: string) => {
+    setBulletsText(val);
+    onUpdate({ bullets: val.split("\n") });
+  };
+
+  return (
+    <div className="card grid gap-2.5 md:grid-cols-3">
+      <input
+        className="input"
+        placeholder="Company / Organization"
+        value={item.company}
+        onChange={(ev) => onUpdate({ company: ev.target.value })}
+      />
+      <input
+        className="input"
+        placeholder="Role / Title"
+        value={item.role}
+        onChange={(ev) => onUpdate({ role: ev.target.value })}
+      />
+      <input
+        className="input"
+        placeholder="Period (e.g. 2023–Present)"
+        value={item.period}
+        onChange={(ev) => onUpdate({ period: ev.target.value })}
+      />
+      <textarea
+        className="input md:col-span-3 resize-y"
+        rows={3}
+        placeholder="Achievements / bullet points (one per line)"
+        value={bulletsText}
+        onChange={(ev) => handleBulletsChange(ev.target.value)}
+      />
+      <div className="md:col-span-3 flex justify-end">
+        <button
+          type="button"
+          className="text-xs text-rose-500 hover:text-rose-700 transition-colors py-1 px-2 font-medium"
+          onClick={onRemove}
+        >
+          Remove
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ExpSection({
+  title,
+  items,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  title: string;
+  items: Exp[];
+  onAdd: () => void;
+  onUpdate: (id: string, patch: Partial<Exp>) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium text-slate-800 dark:text-slate-200">{title}</h3>
+        <button
+          type="button"
+          className="btn-ghost text-xs"
+          onClick={onAdd}
+        >
+          + Add {title.endsWith("s") ? title.slice(0, -1) : title}
+        </button>
+      </div>
+      {items.map((e) => (
+        <ExpItem
+          key={e.id}
+          item={e}
+          onUpdate={(patch) => onUpdate(e.id, patch)}
+          onRemove={() => onRemove(e.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function ProfileEditor() {
   const p = useS((s) => s.profile);
+  const [skillsText, setSkillsText] = useState(p.skills.join(", "));
+
+  useEffect(() => {
+    setSkillsText(p.skills.join(", "));
+  }, [p.name, p.email]);
+
   const up = (patch: Partial<Profile>) => set((s) => ({ profile: { ...s.profile, ...patch } }));
   const upList = (k: "experience" | "projects", id: string, patch: Partial<Exp>) =>
     up({ [k]: p[k].map((e) => (e.id === id ? { ...e, ...patch } : e)) });
 
-  const List = ({ k, title }: { k: "experience" | "projects"; title: string }) => (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h3 className="font-medium">{title}</h3>
-        <button
-          className="btn-ghost"
-          onClick={() =>
-            up({ [k]: [...p[k], { id: uid(), company: "", role: "", period: "", bullets: [] }] })
-          }
-        >
-          Add {title.slice(0, -1)}
-        </button>
-      </div>
-      {p[k].map((e) => (
-        <div key={e.id} className="card grid gap-2 md:grid-cols-3">
-          <input
-            className="input"
-            placeholder="Company / Organization"
-            value={e.company}
-            onChange={(ev) => upList(k, e.id, { company: ev.target.value })}
-          />
-          <input
-            className="input"
-            placeholder="Role / Title"
-            value={e.role}
-            onChange={(ev) => upList(k, e.id, { role: ev.target.value })}
-          />
-          <input
-            className="input"
-            placeholder="Period (e.g. 2023–Present)"
-            value={e.period}
-            onChange={(ev) => upList(k, e.id, { period: ev.target.value })}
-          />
-          <textarea
-            className="input md:col-span-3"
-            rows={4}
-            placeholder="Achievements / bullet points (one per line)"
-            value={e.bullets.join("\n")}
-            onChange={(ev) => upList(k, e.id, { bullets: ev.target.value.split("\n").filter(Boolean) })}
-          />
-          <button
-            className="btn-ghost md:col-span-3 text-red-600"
-            onClick={() => up({ [k]: p[k].filter((x) => x.id !== e.id) })}
-          >
-            Remove
-          </button>
-        </div>
-      ))}
-    </div>
-  );
+  const addExp = (k: "experience" | "projects") => {
+    up({ [k]: [...p[k], { id: uid(), company: "", role: "", period: "", bullets: [] }] });
+  };
+
+  const removeExp = (k: "experience" | "projects", id: string) => {
+    up({ [k]: p[k].filter((x) => x.id !== id) });
+  };
 
   return (
     <div className="space-y-4">
@@ -82,8 +142,12 @@ export function ProfileEditor() {
           <label className="label">Skills (comma separated)</label>
           <input
             className="input"
-            value={p.skills.join(", ")}
-            onChange={(e) => up({ skills: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
+            value={skillsText}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSkillsText(val);
+              up({ skills: val.split(",").map((s) => s.trim()).filter(Boolean) });
+            }}
             placeholder="Python, FastAPI, React, TypeScript, Docker, MongoDB"
           />
         </div>
@@ -101,8 +165,22 @@ export function ProfileEditor() {
           </button>
         </div>
       </div>
-      <List k="experience" title="Experience" />
-      <List k="projects" title="Projects" />
+
+      <ExpSection
+        title="Experience"
+        items={p.experience}
+        onAdd={() => addExp("experience")}
+        onUpdate={(id, patch) => upList("experience", id, patch)}
+        onRemove={(id) => removeExp("experience", id)}
+      />
+
+      <ExpSection
+        title="Projects"
+        items={p.projects}
+        onAdd={() => addExp("projects")}
+        onUpdate={(id, patch) => upList("projects", id, patch)}
+        onRemove={(id) => removeExp("projects", id)}
+      />
     </div>
   );
 }
