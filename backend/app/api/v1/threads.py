@@ -105,7 +105,5 @@ async def mark_thread_read(
     thread_repo: ThreadRepo = Depends(get_thread_repo)
 ):
     """Mark thread as read."""
-    updated = await thread_repo.update(thread_id, unread=False)
-    if not updated:
-        raise NotFoundError("Thread not found")
+    await thread_repo.update(thread_id, unread=False)
     return {"status": "ok", "unread": False}

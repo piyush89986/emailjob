@@ -66,6 +66,11 @@ async def draft_email(
     response_model=TailorResumeResponse,
     dependencies=[Depends(rate_limit_dependency(settings.rate_limit_ai_per_minute))]
 )
+@router.post(
+    "/ai/resume/tailor",
+    response_model=TailorResumeResponse,
+    dependencies=[Depends(rate_limit_dependency(settings.rate_limit_ai_per_minute))]
+)
 async def tailor_resume(
     body: TailorResumeRequest,
     user: User = Depends(get_current_user)
@@ -78,6 +83,7 @@ async def tailor_resume(
 
 
 @router.post("/resumes", response_model=ResumeVersionResponse)
+@router.post("/ai/resumes", response_model=ResumeVersionResponse)
 async def save_resume_version(
     body: ResumeSaveRequest,
     repo: ResumeRepo = Depends(get_resume_repo)
@@ -99,6 +105,7 @@ async def save_resume_version(
 
 
 @router.get("/resumes", response_model=List[ResumeVersionResponse])
+@router.get("/ai/resumes", response_model=List[ResumeVersionResponse])
 async def list_resume_versions(repo: ResumeRepo = Depends(get_resume_repo)):
     """List saved resume versions."""
     versions = await repo.list_versions()

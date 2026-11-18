@@ -1,22 +1,37 @@
 """Real-time Server-Sent Events (SSE) router."""
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from app.api.deps import get_current_user
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from app.core.errors import UnauthorizedError
 from app.core.events import event_generator
 from app.core.security import decode_token
-from app.models.user import User
 
 router = APIRouter(tags=["Events"])
+security = HTTPBearer(auto_error=False)
 
 
 @router.get("/events")
 async def sse_events_stream(
-    token: str = Query(None),
-    user: User = Depends(get_current_user)
+    token: Optional[str] = Query(None),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ):
-    """Subscribe to real-time events for tenant (reply.received, unread.count, account.needs_reauth, delivery.updated)."""
+    """Subscribe to real-time events for tenant (supports both query param token and header)."""
+    jwt_str = token or (credentials.credentials if credentials else None)
+    if not jwt_str:
+        raise UnauthorizedError("Missing authentication token")
+
+    try:
+        payload = decode_token(jwt_str)
+    except Exception:
+        raise UnauthorizedError("Invalid or expired token")
+
+    tenant_id = payload.get("tenant_id")
+    if not tenant_id:
+        raise UnauthorizedError("Invalid token claims")
+
     return StreamingResponse(
-        event_generator(user.tenant_id),
+        event_generator(tenant_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
