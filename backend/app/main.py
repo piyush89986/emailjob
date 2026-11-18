@@ -21,7 +21,7 @@ from app.scripts.seed import seed_global_templates
 
 # Import routers
 from app.api.v1.auth import router as auth_router
-from app.api.v1.accounts import router as accounts_router
+from app.api.v1.accounts import router as accounts_router, oauth_callback
 from app.api.v1.emails import router as emails_router
 from app.api.v1.threads import router as threads_router
 from app.api.v1.contacts import router as contacts_router
@@ -179,6 +179,11 @@ async def health(request: Request):
 # Mount Routers
 app.include_router(auth_router)
 app.include_router(accounts_router)
+
+# Alias for alternate Google OAuth redirect URI
+@app.get("/api/auth/google/callback", tags=["Email Accounts"])
+async def google_callback_alias(code: str, state: str):
+    return await oauth_callback(provider="gmail", code=code, state=state)
 app.include_router(emails_router)
 app.include_router(threads_router)
 app.include_router(contacts_router)
