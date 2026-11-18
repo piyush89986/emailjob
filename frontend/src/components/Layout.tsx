@@ -23,14 +23,37 @@ export default function Layout() {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex-col md:flex-row">
       {/* Sidebar: Fixed on left on desktop, top bar on mobile */}
-      <aside className="shrink-0 border-b border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900 md:w-56 md:border-b-0 md:border-r md:p-3 md:h-screen md:overflow-y-auto flex flex-col justify-between z-20">
+      <aside className="shrink-0 border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900 md:w-60 md:border-b-0 md:border-r md:p-4 md:h-screen md:overflow-y-auto flex flex-col justify-between z-20">
         <div>
-          <div className="mb-3 hidden items-center gap-2 px-2 md:flex">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white text-sm shadow-sm">
-              J
+          {/* Header row: on desktop JobMail; on mobile JobMail + actions */}
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white text-sm shadow-sm">
+                J
+              </div>
+              <span className="text-lg font-bold tracking-tight">JobMail</span>
             </div>
-            <span className="text-lg font-bold tracking-tight">JobMail</span>
+
+            {/* Mobile-only action buttons */}
+            <div className="flex items-center gap-1.5 md:hidden">
+              <button
+                onClick={toggleDark}
+                aria-label="Toggle dark mode"
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
+              >
+                {dark ? <Sun size={16} /> : <Moon size={16} />}
+              </button>
+              <button
+                onClick={logout}
+                aria-label="Log out"
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-rose-400 transition-colors"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
+
+          {/* Navigation links */}
           <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
             {nav.map(({ to, label, icon: Icon }) => (
               <NavLink
@@ -56,46 +79,50 @@ export default function Layout() {
             ))}
           </nav>
         </div>
-        <div className="hidden border-t border-slate-100 pt-3 dark:border-slate-800 md:block">
-          <div className="flex items-center gap-2 px-2 py-1 text-xs text-slate-500">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0"></span>
-            <span className="truncate">{user?.email || "Connected"}</span>
-          </div>
-        </div>
-      </aside>
 
-      {/* Main Content Area: header fixed at top, content scrolls cleanly */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="shrink-0 flex items-center justify-between border-b border-slate-200 px-4 py-2 text-sm dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur z-10">
-          <div className="flex items-center gap-2 md:hidden">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-600 font-bold text-white text-xs">
-              J
+        {/* Desktop-only footer in sidebar with User info, Theme toggle, and Logout */}
+        <div className="hidden border-t border-slate-200 pt-3 dark:border-slate-800 md:flex md:items-center md:justify-between md:gap-2 mt-auto">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 text-xs font-bold">
+              {user?.email ? user.email[0].toUpperCase() : "U"}
             </div>
-            <span className="font-bold text-slate-900 dark:text-white">JobMail</span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-xs font-medium text-slate-800 dark:text-slate-200">
+                {user?.email || "Account"}
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                <span>Active</span>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-3 ml-auto">
-            <span className="hidden text-xs text-slate-500 sm:inline">{user?.email}</span>
+          <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={toggleDark}
               aria-label="Toggle dark mode"
-              className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
+              title={dark ? "Switch to light mode" : "Switch to dark mode"}
+              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
             >
               {dark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <button
               onClick={logout}
               aria-label="Log out"
-              className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-rose-400 transition-colors"
+              title="Log out"
+              className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition-colors"
             >
               <LogOut size={16} />
             </button>
           </div>
-        </header>
+        </div>
+      </aside>
 
+      {/* Main Content Area (No top header!) */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         {reauth && (
           <Link
             to="/settings"
-            className="shrink-0 flex items-center gap-2 bg-amber-100 px-4 py-2 text-sm text-amber-900"
+            className="shrink-0 flex items-center gap-2 bg-amber-100 px-4 py-2 text-sm text-amber-900 dark:bg-amber-950/50 dark:text-amber-300"
           >
             <AlertTriangle size={14} />
             <span>A mailbox needs to be reconnected. Fix it in Settings.</span>
