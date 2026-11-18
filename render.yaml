@@ -1,0 +1,84 @@
+services:
+  # 1. FastAPI Web API
+  - type: web
+    name: jobmail-api
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: PORT
+        value: 8000
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: MONGO_DB
+        value: jobmail_prod
+      - key: REDIS_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: MS_CLIENT_ID
+        sync: false
+      - key: MS_CLIENT_SECRET
+        sync: false
+      - key: MS_REDIRECT_URI
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+
+  # 2. ARQ Background Task Worker
+  - type: worker
+    name: jobmail-worker
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: arq app.workers.worker.WorkerSettings
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: jobmail-api
+          envVarKey: SECRET_KEY
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: MONGO_DB
+        value: jobmail_prod
+      - key: REDIS_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: MS_CLIENT_ID
+        sync: false
+      - key: MS_CLIENT_SECRET
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

@@ -1,0 +1,50 @@
+"""MongoDB Beanie Document models for JobMail."""
+from app.models.tenant import Tenant
+from app.models.user import User
+from app.models.refresh_token import RefreshToken
+from app.models.account import EmailAccount
+from app.models.contact import Contact
+from app.models.thread import Thread
+from app.models.message import Message
+from app.models.template import Template
+from app.models.application import Application
+from app.models.profile import Profile
+from app.models.settings import TenantSettings
+from app.models.resume import ResumeVersion
+from app.models.attachment import Attachment
+from app.models.audit_log import AuditLog
+
+ALL_DOCUMENT_MODELS = [
+    Tenant,
+    User,
+    RefreshToken,
+    EmailAccount,
+    Contact,
+    Thread,
+    Message,
+    Template,
+    Application,
+    Profile,
+    TenantSettings,
+    ResumeVersion,
+    Attachment,
+    AuditLog,
+]
+
+__all__ = [
+    "Tenant",
+    "User",
+    "RefreshToken",
+    "EmailAccount",
+    "Contact",
+    "Thread",
+    "Message",
+    "Template",
+    "Application",
+    "Profile",
+    "TenantSettings",
+    "ResumeVersion",
+    "Attachment",
+    "AuditLog",
+    "ALL_DOCUMENT_MODELS",
+]
