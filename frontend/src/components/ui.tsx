@@ -8,8 +8,24 @@ export const Empty = ({ title, hint }: { title: string; hint?: string }) => (
   <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center dark:border-slate-700"><div className="font-medium">{title}</div>{hint && <div className="mt-1 text-sm text-slate-500">{hint}</div>}</div>
 );
 export const useReady = (ms = 400) => { const [r, s] = useState(false); useEffect(() => { const t = setTimeout(() => s(true), ms); return () => clearTimeout(t); }, [ms]); return r; };
-export const Page = ({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) => (
-  <div><div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h1 className="text-2xl font-semibold">{title}</h1><div className="flex gap-2">{actions}</div></div>{children}</div>
+export const Page = ({
+  title,
+  actions,
+  children,
+  className = "",
+}: {
+  title: string;
+  actions?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) => (
+  <div className={`flex flex-col flex-1 min-h-0 ${className}`}>
+    <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-2">
+      <h1 className="text-2xl font-semibold">{title}</h1>
+      <div className="flex gap-2">{actions}</div>
+    </div>
+    {children}
+  </div>
 );
 const colors: Record<string, string> = { Replied: "bg-green-100 text-green-800", replied: "bg-green-100 text-green-800", Contacted: "bg-slate-200 text-slate-800", waiting: "bg-amber-100 text-amber-800", bounced: "bg-red-100 text-red-800", Interview: "bg-blue-100 text-blue-800", Offer: "bg-emerald-200 text-emerald-900", Rejected: "bg-rose-100 text-rose-800", connected: "bg-green-100 text-green-800", needs_reauth: "bg-amber-100 text-amber-800", error: "bg-red-100 text-red-800", failed: "bg-red-100 text-red-800", sent: "bg-green-100 text-green-800", sending: "bg-slate-200 text-slate-700" };
 export const Badge = ({ v }: { v: string }) => <span className={`badge ${colors[v] ?? "bg-slate-200 text-slate-800"}`}>{v.replace("_", " ")}</span>;

@@ -7,4 +7,21 @@
   .badge { @apply inline-block rounded-full px-2 py-0.5 text-xs font-medium; }
   .label { @apply mb-1 block text-xs font-medium text-slate-500; }
 }
+
+/* Modern sleek scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.6);
+}
+
 @media print { body * { visibility: hidden; } #resume-print, #resume-print * { visibility: visible; } #resume-print { position: absolute; inset: 0; } }
