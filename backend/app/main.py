@@ -56,7 +56,7 @@ async def init_db_with_retries(mongo_client, db_name: str, max_retries: int = 3)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    timeout_ms = 500 if settings.app_env == "test" else 5000
+    timeout_ms = 500 if settings.app_env == "test" else 30000
     app.state.mongo = AsyncIOMotorClient(settings.mongo_uri, serverSelectionTimeoutMS=timeout_ms)
     app.state.redis = Redis.from_url(settings.redis_url)
 
@@ -91,6 +91,23 @@ app.add_middleware(
 
 # Error handlers
 register_error_handlers(app)
+
+
+# Auto-heal DB Connection Middleware
+@app.middleware("http")
+async def ensure_db_mw(request: Request, call_next):
+    """Ensure Beanie models are initialized before processing request."""
+    if settings.app_env != "test":
+        try:
+            User.get_collection()
+        except Exception:
+            try:
+                log.info("auto_healing_beanie_on_request")
+                await init_beanie(database=request.app.state.mongo[settings.mongo_db], document_models=ALL_DOCUMENT_MODELS)
+                await seed_global_templates()
+            except Exception as e:
+                log.error("auto_heal_failed", error=str(e))
+    return await call_next(request)
 
 
 # Request ID & Logging Middleware
@@ -132,14 +149,15 @@ async def health(request: Request):
 
     # Check Beanie status & auto-heal if needed
     try:
-        col = User.get_motor_collection()
-        if col is None:
-            healed = await init_db_with_retries(request.app.state.mongo, settings.mongo_db, max_retries=2)
-            status["beanie"] = "healed" if healed else "uninitialized"
-        else:
-            status["beanie"] = "ok"
+        col = User.get_collection()
+        status["beanie"] = "ok"
     except Exception as e:
-        status["beanie"] = f"error: {str(e)}"
+        try:
+            await init_beanie(database=request.app.state.mongo[settings.mongo_db], document_models=ALL_DOCUMENT_MODELS)
+            await seed_global_templates()
+            status["beanie"] = "healed"
+        except Exception as init_err:
+            status["beanie"] = f"error: {type(init_err).__name__}: {str(init_err)}"
 
     mongo_target = "localhost" if "localhost" in settings.mongo_uri else (
         settings.mongo_uri.split("@")[-1].split("/")[0] if "@" in settings.mongo_uri else "remote"

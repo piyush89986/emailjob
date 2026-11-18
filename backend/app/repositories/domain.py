@@ -45,24 +45,38 @@ class UserRepo(TenantRepository[User]):
     model = User
 
     async def get_by_email(self, email: str) -> Optional[User]:
-        return await self.find_one(User.email == email.lower().strip())
+        clean = email.lower().strip()
+        try:
+            return await self.find_one(User.email == clean)
+        except AttributeError:
+            return await self.find_one({"email": clean})
 
     @staticmethod
     async def find_by_email_global(email: str) -> Optional[User]:
         """Global lookup used during authentication before tenant context is known."""
-        return await User.find_one(User.email == email.lower().strip())
+        clean = email.lower().strip()
+        try:
+            return await User.find_one(User.email == clean)
+        except AttributeError:
+            return await User.find_one({"email": clean})
 
 
 class RefreshTokenRepo(TenantRepository[RefreshToken]):
     model = RefreshToken
 
     async def get_by_hash(self, token_hash: str) -> Optional[RefreshToken]:
-        return await self.find_one(RefreshToken.token_hash == token_hash)
+        try:
+            return await self.find_one(RefreshToken.token_hash == token_hash)
+        except AttributeError:
+            return await self.find_one({"token_hash": token_hash})
 
     @staticmethod
     async def get_by_hash_global(token_hash: str) -> Optional[RefreshToken]:
         """Lookup during token refresh."""
-        return await RefreshToken.find_one(RefreshToken.token_hash == token_hash)
+        try:
+            return await RefreshToken.find_one(RefreshToken.token_hash == token_hash)
+        except AttributeError:
+            return await RefreshToken.find_one({"token_hash": token_hash})
 
     async def revoke_user_tokens(self, user_id: str) -> None:
         await RefreshToken.find(
