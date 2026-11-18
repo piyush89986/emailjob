@@ -1,7 +1,7 @@
 """LLM Router managing provider fallback, retries, cost tracking, and monthly quotas."""
 import asyncio
 from datetime import datetime, timezone
-from typing import Type, TypeVar
+from typing import Any, Type, TypeVar
 from pydantic import BaseModel
 from app.core.config import get_settings
 from app.core.errors import AppError, QuotaExceededError
