@@ -33,7 +33,8 @@ function Accounts() {
   const connectOAuth = async (provider: "gmail" | "outlook") => {
     try {
       toast(`Initiating ${provider} login...`);
-      const res = await api.get(`/accounts/oauth/${provider}/start`);
+      const returnUrl = window.location.origin + "/settings";
+      const res = await api.get(`/accounts/oauth/${provider}/start`, { params: { return_url: returnUrl } });
       if (res.data?.url) {
         window.location.href = res.data.url;
       }

@@ -19,8 +19,9 @@ settings = get_settings()
 
 class AccountService:
     @staticmethod
-    def get_oauth_start_url(provider: str, tenant_id: str) -> str:
+    def get_oauth_start_url(provider: str, tenant_id: str, return_url: Optional[str] = None) -> str:
         """Generate OAuth authorization redirect URL."""
+        state_payload = f"{tenant_id}|{return_url}" if return_url else tenant_id
         if provider == "gmail":
             scopes = [
                 "https://mail.google.com/",
@@ -33,7 +34,7 @@ class AccountService:
                 "scope": " ".join(scopes),
                 "access_type": "offline",
                 "prompt": "consent",
-                "state": tenant_id
+                "state": state_payload
             }
             query = "&".join(f"{k}={v}" for k, v in params.items())
             return f"https://accounts.google.com/o/oauth2/v2/auth?{query}"
@@ -52,7 +53,7 @@ class AccountService:
             ]
             return cca.get_authorization_request_url(
                 scopes=scopes,
-                state=tenant_id,
+                state=state_payload,
                 redirect_uri=settings.ms_redirect_uri
             )
         else:

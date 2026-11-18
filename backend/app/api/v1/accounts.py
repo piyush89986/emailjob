@@ -1,8 +1,9 @@
 """Email accounts API router."""
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import RedirectResponse
 from app.api.deps import get_account_repo, get_audit_repo, get_current_user
+from app.core.config import get_settings
 from app.core.errors import NotFoundError
 from app.models.user import User
 from app.repositories.domain import AccountRepo, AuditRepo
@@ -36,10 +37,11 @@ async def list_accounts(repo: AccountRepo = Depends(get_account_repo)):
 @router.get("/oauth/{provider}/start")
 async def start_oauth(
     provider: str,
+    return_url: Optional[str] = Query(None),
     user: User = Depends(get_current_user)
 ):
     """Get OAuth authorization URL for Gmail or Outlook."""
-    url = AccountService.get_oauth_start_url(provider, user.tenant_id)
+    url = AccountService.get_oauth_start_url(provider, user.tenant_id, return_url=return_url)
     return {"url": url}
 
 
@@ -50,13 +52,19 @@ async def oauth_callback(
     state: str = Query(...)
 ):
     """Handle OAuth redirect callback."""
-    # State parameter carries tenant_id
-    tenant_id = state
+    # State parameter carries tenant_id and optional return_url
+    parts = state.split("|", 1)
+    tenant_id = parts[0]
+    return_url = parts[1] if len(parts) > 1 else None
+
     await AccountService.handle_oauth_callback(provider, code, tenant_id)
-    # Redirect back to frontend settings page
-    settings_obj = get_settings()
-    frontend_url = settings_obj.cors_list[0] if settings_obj.cors_list else "http://localhost:5173"
-    return RedirectResponse(url=f"{frontend_url}/settings")
+
+    # Redirect back to frontend
+    if not return_url:
+        settings_obj = get_settings()
+        frontend_url = settings_obj.cors_list[0] if settings_obj.cors_list else "http://localhost:5173"
+        return_url = f"{frontend_url}/settings"
+    return RedirectResponse(url=return_url)
 
 
 @router.post("/imap/test")
