@@ -76,5 +76,13 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _any(_: Request, e: Exception):
-        log.error("unhandled", error=repr(e))
-        return JSONResponse(_body("internal_error", "Something went wrong"), status_code=500)
+        import traceback
+        tb = traceback.format_exc()
+        log.error("unhandled", error=repr(e), traceback=tb)
+        # Return informative error details to client so issues can be diagnosed instantly
+        err_msg = str(e).strip() or type(e).__name__
+        tb_lines = [line.strip() for line in tb.splitlines()[-6:] if line.strip()]
+        return JSONResponse(
+            _body("internal_error", f"Server error: {err_msg}", details={"exception": type(e).__name__, "traceback": tb_lines}),
+            status_code=500
+        )

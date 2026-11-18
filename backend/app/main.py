@@ -1,4 +1,5 @@
 """JobMail FastAPI production entrypoint."""
+import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -11,6 +12,7 @@ from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import get_logger, request_id_var, setup_logging
 from app.models import ALL_DOCUMENT_MODELS
+from app.models.user import User
 from app.scripts.seed import seed_global_templates
 
 # Import routers
@@ -33,17 +35,32 @@ setup_logging()
 log = get_logger("main")
 
 
+async def init_db_with_retries(mongo_client, db_name: str, max_retries: int = 3):
+    """Initialize Beanie ODM with retries to handle cloud DB latency."""
+    if settings.app_env == "test":
+        return True
+    for attempt in range(1, max_retries + 1):
+        try:
+            log.info("initializing_beanie", attempt=attempt, db=db_name)
+            await init_beanie(database=mongo_client[db_name], document_models=ALL_DOCUMENT_MODELS)
+            await seed_global_templates()
+            log.info("database_and_templates_initialized")
+            return True
+        except Exception as e:
+            log.warning("beanie_init_attempt_failed", attempt=attempt, error=str(e))
+            if attempt < max_retries:
+                await asyncio.sleep(1)
+    log.error("beanie_failed_all_retries")
+    return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.mongo = AsyncIOMotorClient(settings.mongo_uri, serverSelectionTimeoutMS=3000)
+    timeout_ms = 500 if settings.app_env == "test" else 5000
+    app.state.mongo = AsyncIOMotorClient(settings.mongo_uri, serverSelectionTimeoutMS=timeout_ms)
     app.state.redis = Redis.from_url(settings.redis_url)
 
-    try:
-        await init_beanie(database=app.state.mongo[settings.mongo_db], document_models=ALL_DOCUMENT_MODELS)
-        await seed_global_templates()
-        log.info("database_and_templates_initialized")
-    except Exception as e:
-        log.warning("beanie_startup_warning", error=str(e))
+    await init_db_with_retries(app.state.mongo, settings.mongo_db)
 
     log.info("startup", env=settings.app_env)
     yield
@@ -66,6 +83,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_list,
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -104,13 +122,31 @@ async def health(request: Request):
     try:
         await request.app.state.mongo.admin.command("ping")
         status["mongo"] = "ok"
-    except Exception:
-        status["mongo"] = "down"
+    except Exception as e:
+        status["mongo"] = f"down: {str(e)}"
     try:
         await request.app.state.redis.ping()
         status["redis"] = "ok"
-    except Exception:
-        status["redis"] = "down"
+    except Exception as e:
+        status["redis"] = f"down: {str(e)}"
+
+    # Check Beanie status & auto-heal if needed
+    try:
+        col = User.get_motor_collection()
+        if col is None:
+            healed = await init_db_with_retries(request.app.state.mongo, settings.mongo_db, max_retries=2)
+            status["beanie"] = "healed" if healed else "uninitialized"
+        else:
+            status["beanie"] = "ok"
+    except Exception as e:
+        status["beanie"] = f"error: {str(e)}"
+
+    mongo_target = "localhost" if "localhost" in settings.mongo_uri else (
+        settings.mongo_uri.split("@")[-1].split("/")[0] if "@" in settings.mongo_uri else "remote"
+    )
+    status["mongo_target"] = mongo_target
+    status["db_name"] = settings.mongo_db
+    status["env"] = settings.app_env
     return status
 
 
