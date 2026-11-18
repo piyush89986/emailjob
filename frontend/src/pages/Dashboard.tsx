@@ -12,10 +12,13 @@ export default function Dashboard() {
   const stale = waiting.filter((t) => Date.now() - +new Date(t.messages[t.messages.length - 1].at) > 5 * 864e5);
   const stats = [["Sent this week", week], ["Reply rate", threads.length ? `${Math.round((100 * replied) / threads.length)}%` : "0%"], ["Awaiting reply", waiting.length], ["Interviews", contacts.filter((c) => c.status === "Interview").length]];
   const draft = (id: string) => {
-    const t = threads.find((x) => x.id === id)!, c = contacts.find((x) => x.id === t.contactId)!;
-    const f = tpl.find((x) => x.id === "t4")!;
+    const t = threads.find((x) => x.id === id), c = t ? contacts.find((x) => x.id === t.contactId) : undefined;
+    if (!t || !c) return;
+    const f = tpl.find((x) => x.name.toLowerCase().includes("follow-up")) || tpl[0];
+    const sub = f ? f.subject : "Following up: {{role}} application";
+    const body = f ? f.body : "<p>Hi {{hr_name}},</p><p>I wanted to follow up on my application for {{role}} at {{company}}.</p><p>Thanks,<br>{{my_name}}</p>";
     const v = { hr_name: c.name, company: c.company, role: t.subject.replace(/^.*?for /, ""), my_name: profile.name, skills: profile.skills.slice(0, 3).join(", ") };
-    set(() => ({ draft: { to: c.email, subject: fill(f.subject, v), body: fill(f.body, v) } })); nav("/compose");
+    set(() => ({ draft: { to: c.email, subject: fill(sub, v), body: fill(body, v) } })); nav("/compose");
   };
   if (!ready) return <Page title="Dashboard"><Skeleton n={4} /></Page>;
   const rec = contacts.filter((c) => c.lastRepliedAt).sort((a, b) => +new Date(b.lastRepliedAt!) - +new Date(a.lastRepliedAt!));

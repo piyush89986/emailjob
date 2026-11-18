@@ -10,50 +10,14 @@ from pydantic import Field
 class Profile(Document):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     tenant_id: str
-    name: str = "Alex Doe"
-    email: str = "alex@gmail.com"
-    headline: str = "Full-stack developer"
-    skills: List[str] = Field(default_factory=lambda: [
-        "React", "TypeScript", "Python", "FastAPI", "MongoDB", "Docker", "Git", "Tailwind"
-    ])
-    experience: List[Dict[str, Any]] = Field(default_factory=lambda: [
-        {
-            "id": "e1",
-            "company": "Beta Labs",
-            "role": "Software Engineer",
-            "period": "2023–Present",
-            "bullets": [
-                "Built React dashboards used by 3 teams",
-                "Developed FastAPI services backed by MongoDB",
-                "Containerised services with Docker",
-                "Wrote onboarding documentation"
-            ]
-        },
-        {
-            "id": "e2",
-            "company": "Gamma Studio",
-            "role": "Intern",
-            "period": "2022",
-            "bullets": [
-                "Built UI components with Tailwind",
-                "Fixed bugs in a TypeScript codebase"
-            ]
-        }
-    ])
-    projects: List[Dict[str, Any]] = Field(default_factory=lambda: [
-        {
-            "id": "p1",
-            "company": "JobTracker",
-            "role": "Side project",
-            "period": "2022",
-            "bullets": [
-                "Python script that tracks job postings",
-                "React front-end for browsing saved jobs"
-            ]
-        }
-    ])
-    education: str = "B.Tech Computer Science, 2023"
-    links: str = "github.com/alexdoe"
+    name: str = ""
+    email: str = ""
+    headline: str = ""
+    skills: List[str] = Field(default_factory=list)
+    experience: List[Dict[str, Any]] = Field(default_factory=list)
+    projects: List[Dict[str, Any]] = Field(default_factory=list)
+    education: str = ""
+    links: str = ""
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

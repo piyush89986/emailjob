@@ -12,8 +12,8 @@ class Settings(BaseSettings):
     port: int = 8000
 
     # JWT & Auth
-    secret_key: str = "change-me-to-a-super-secret-random-jwt-key"
-    encryption_key: str = "5T0h8oW_xY1Q2Z3a4b5c6d7e8f9g0h1i2j3k4l5m6n7="
+    secret_key: str = "change-me-in-production"
+    encryption_key: str = ""
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 30
     jwt_algorithm: str = "HS256"

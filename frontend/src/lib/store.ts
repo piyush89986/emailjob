@@ -19,56 +19,40 @@ export interface Draft { to: string; subject: string; body: string }
 export interface S { user: { name: string; email: string } | null; contacts: Contact[]; threads: Thread[]; templates: Template[]; apps: App[]; accounts: Account[]; profile: Profile; prefs: Prefs; toasts: Toast[]; dark: boolean; resumes: ResumeVersion[]; draft: Draft | null }
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
-const ago = (d: number) => new Date(Date.now() - d * 864e5).toISOString();
 
-const seedTemplates: Template[] = [
-  { id: "t1", global: true, name: "Fresher application", subject: "Application for {{role}} – {{my_name}}", body: "<p>Dear {{hr_name}},</p><p>I am a recent graduate keen to start my career as a {{role}} at {{company}}. My skills include {{skills}}.</p><p>I have attached my resume and would welcome a chance to talk.</p><p>Regards,<br>{{my_name}}</p>" },
-  { id: "t2", global: true, name: "Experienced application", subject: "{{role}} opportunity at {{company}} – {{my_name}}", body: "<p>Hi {{hr_name}},</p><p>I'm excited about the {{role}} position at {{company}}. With hands-on experience in {{skills}}, I believe I can contribute quickly.</p><p>My resume is attached. Happy to share more.</p><p>Best,<br>{{my_name}}</p>" },
-  { id: "t3", global: true, name: "Referral request", subject: "Referral request for {{role}} at {{company}}", body: "<p>Hi {{hr_name}},</p><p>I'd be grateful for a referral for the {{role}} role at {{company}}. My background in {{skills}} matches the requirements.</p><p>Thank you,<br>{{my_name}}</p>" },
-  { id: "t4", global: true, name: "Follow-up after 5 days", subject: "Following up: {{role}} application", body: "<p>Hi {{hr_name}},</p><p>I wanted to follow up on my application for {{role}} at {{company}}. I remain very interested and happy to provide anything further.</p><p>Thanks,<br>{{my_name}}</p>" },
-  { id: "t5", global: true, name: "Thank-you after interview", subject: "Thank you – {{role}} interview", body: "<p>Hi {{hr_name}},</p><p>Thank you for taking the time to interview me for the {{role}} position at {{company}}. I enjoyed learning more about the team.</p><p>Best regards,<br>{{my_name}}</p>" },
-];
-
-const seed = (): S => ({
-  user: null, dark: false, draft: null, toasts: [], resumes: [],
-  contacts: [
-    { id: "c1", name: "Priya Sharma", email: "priya@acme.com", company: "Acme Corp", status: "Replied", lastRepliedAt: ago(1), createdAt: ago(6) },
-    { id: "c2", name: "Rahul Verma", email: "rahul@globex.io", company: "Globex", status: "Contacted", createdAt: ago(7) },
-    { id: "c3", name: "Anna Lee", email: "anna@initech.com", company: "Initech", status: "Interview", lastRepliedAt: ago(3), createdAt: ago(12) },
-    { id: "c4", name: "HR Team", email: "hr@umbrella.co", company: "Umbrella", status: "Contacted", createdAt: ago(2) },
-  ],
-  threads: [
-    { id: "th1", subject: "Application for Frontend Developer – Alex", contactId: "c1", unread: true, messages: [
-      { id: "m1", dir: "out", from: "me", body: "Dear Priya, I'd like to apply for the Frontend Developer role.", at: ago(2), kind: "normal", delivery: "sent" },
-      { id: "m2", dir: "in", from: "priya@acme.com", body: "Hi Alex, thanks! Are you free for a call on Friday?", at: ago(1), kind: "normal" }] },
-    { id: "th2", subject: "Backend Engineer opportunity at Globex", contactId: "c2", unread: false, messages: [
-      { id: "m3", dir: "out", from: "me", body: "Hi Rahul, I'm interested in the Backend Engineer role.", at: ago(7), kind: "normal", delivery: "sent" }] },
-    { id: "th3", subject: "Thank you – Full-stack interview", contactId: "c3", unread: false, messages: [
-      { id: "m4", dir: "out", from: "me", body: "Thanks Anna for the interview.", at: ago(4), kind: "normal", delivery: "sent" },
-      { id: "m5", dir: "in", from: "anna@initech.com", body: "Great speaking with you. We'll be in touch.", at: ago(3), kind: "normal" }] },
-    { id: "th4", subject: "Application – QA Engineer", contactId: "c4", unread: true, messages: [
-      { id: "m6", dir: "out", from: "me", body: "Hello, applying for QA Engineer.", at: ago(2), kind: "normal", delivery: "sent" },
-      { id: "m7", dir: "in", from: "mailer-daemon@umbrella.co", body: "Delivery failed: mailbox hr@umbrella.co not found.", at: ago(2), kind: "bounce" }] },
-  ],
-  templates: seedTemplates,
-  apps: [
-    { id: "a1", title: "Frontend Developer", company: "Acme Corp", jd: "", jdUrl: "https://acme.com/jobs/1", contactId: "c1", resume: "v1", status: "Replied", timeline: [{ at: ago(2), label: "Applied" }, { at: ago(1), label: "Replied" }] },
-    { id: "a2", title: "Backend Engineer", company: "Globex", jd: "", jdUrl: "", contactId: "c2", resume: "v1", status: "Contacted", timeline: [{ at: ago(7), label: "Contacted" }] },
-  ],
-  accounts: [
-    { id: "ac1", provider: "gmail", address: "alex@gmail.com", status: "connected", isDefault: true },
-    { id: "ac2", provider: "outlook", address: "alex@outlook.com", status: "needs_reauth", isDefault: false },
-  ],
-  profile: { name: "Alex Doe", email: "alex@gmail.com", headline: "Full-stack developer", links: "github.com/alexdoe", education: "B.Tech Computer Science, 2023",
-    skills: ["React", "TypeScript", "Python", "FastAPI", "MongoDB", "Docker", "Git", "Tailwind"],
-    experience: [
-      { id: "e1", company: "Beta Labs", role: "Software Engineer", period: "2023–Present", bullets: ["Built React dashboards used by 3 teams", "Developed FastAPI services backed by MongoDB", "Containerised services with Docker", "Wrote onboarding documentation"] },
-      { id: "e2", company: "Gamma Studio", role: "Intern", period: "2022", bullets: ["Built UI components with Tailwind", "Fixed bugs in a TypeScript codebase"] }],
-    projects: [{ id: "p1", company: "JobTracker", role: "Side project", period: "2022", bullets: ["Python script that tracks job postings", "React front-end for browsing saved jobs"] }] },
-  prefs: { tone: "friendly", provider: "openai", fallback: true, dailyCap: 30, delaySec: 60, dnc: ["noreply@spam.com"], signature: "Alex Doe" },
+const emptyState = (): S => ({
+  user: null,
+  dark: false,
+  draft: null,
+  toasts: [],
+  resumes: [],
+  contacts: [],
+  threads: [],
+  templates: [],
+  apps: [],
+  accounts: [],
+  profile: {
+    name: "",
+    email: "",
+    headline: "",
+    skills: [],
+    experience: [],
+    projects: [],
+    education: "",
+    links: "",
+  },
+  prefs: {
+    tone: "formal",
+    provider: "openai",
+    fallback: true,
+    dailyCap: 20,
+    delaySec: 60,
+    dnc: [],
+    signature: "",
+  },
 });
 
-let state: S = seed();
+let state: S = emptyState();
 const subs = new Set<() => void>();
 export const getState = () => state;
 export const set = (fn: (s: S) => Partial<S>) => { state = { ...state, ...fn(state) }; subs.forEach((s) => s()); };
@@ -82,34 +66,31 @@ export const fill = (t: string, v: Record<string, string>) => t.replace(/{{(\w+)
 
 export const isMockMode = () => import.meta.env.VITE_USE_MOCK === "true";
 
-export async function login(email: string, passwordOrName?: string) {
+export async function login(email: string, password?: string) {
   if (isMockMode()) {
-    set(() => ({ user: { name: passwordOrName || state.profile.name, email } }));
+    set(() => ({ user: { name: email.split("@")[0], email } }));
     return;
   }
+  const res = await api.post("/auth/login", { email, password: password || "" });
+  const { accessToken, refreshToken, access_token, refresh_token } = res.data;
+  tokens.set(accessToken || access_token, refreshToken || refresh_token);
+  await loadInitialData();
+}
 
-  try {
-    // Attempt real backend authentication
-    const pwd = passwordOrName && passwordOrName.length >= 8 ? passwordOrName : "password123";
-    const res = await api.post("/auth/login", { email, password: pwd });
-    const { accessToken, refreshToken, access_token, refresh_token } = res.data;
-    tokens.set(accessToken || access_token, refreshToken || refresh_token);
-    set(() => ({ user: { name: state.profile.name, email } }));
-    await loadInitialData();
-  } catch (err: any) {
-    // If login fails in dev, try signup or fall back cleanly
-    try {
-      const pwd = passwordOrName && passwordOrName.length >= 8 ? passwordOrName : "password123";
-      const signupRes = await api.post("/auth/signup", { email, password: pwd, name: state.profile.name });
-      const { accessToken, refreshToken, access_token, refresh_token } = signupRes.data;
-      tokens.set(accessToken || access_token, refreshToken || refresh_token);
-      set(() => ({ user: { name: state.profile.name, email } }));
-      await loadInitialData();
-    } catch {
-      // Fallback to local session
-      set(() => ({ user: { name: passwordOrName || state.profile.name, email } }));
-    }
+export async function signup(email: string, password: string, name: string, org?: string) {
+  if (isMockMode()) {
+    set(() => ({ user: { name: name || email.split("@")[0], email } }));
+    return;
   }
+  const res = await api.post("/auth/signup", {
+    email,
+    password,
+    name: name || email.split("@")[0],
+    org: org || ""
+  });
+  const { accessToken, refreshToken, access_token, refresh_token } = res.data;
+  tokens.set(accessToken || access_token, refreshToken || refresh_token);
+  await loadInitialData();
 }
 
 export async function loadInitialData() {
@@ -143,6 +124,10 @@ export async function loadInitialData() {
   } catch (e) {
     console.warn("Failed loading backend data, using current state", e);
   }
+}
+
+if (typeof window !== "undefined" && tokens.access) {
+  loadInitialData();
 }
 
 let sseSource: EventSource | null = null;

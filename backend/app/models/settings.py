@@ -15,8 +15,8 @@ class TenantSettings(Document):
     fallback: bool = True
     daily_cap: int = 30
     delay_sec: int = 60
-    dnc: List[str] = Field(default_factory=lambda: ["noreply@spam.com"])
-    signature: str = "Alex Doe"
+    dnc: List[str] = Field(default_factory=list)
+    signature: str = ""
     monthly_ai_limit: float = 20.0
     current_month_ai_usage: float = 0.0
     ai_usage_reset_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
