@@ -48,7 +48,7 @@ class MarkReadRequest(BaseModel):
 
 @router.get("")
 async def list_hr_inbox(
-    filter: str = Query("all", pattern="^(all|hr|interviews|applications|unread|rejections|review)$"),
+    filter: str = Query("all", pattern="^(all|received|sent|hr|interviews|applications|unread|rejections|review)$"),
     q: Optional[str] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(25, ge=1, le=100),
@@ -62,6 +62,12 @@ async def list_hr_inbox(
 
     if filter == "all":
         base_query["is_relevant"] = True
+    elif filter == "received":
+        base_query["is_relevant"] = True
+        base_query["direction"] = "in"
+    elif filter == "sent":
+        base_query["is_relevant"] = True
+        base_query["direction"] = "out"
     elif filter == "hr":
         base_query["category"] = CATEGORY_HR_RECRUITER
     elif filter == "interviews":
@@ -83,6 +89,7 @@ async def list_hr_inbox(
             {"subject": {"$regex": term, "$options": "i"}},
             {"sender_name": {"$regex": term, "$options": "i"}},
             {"sender_email": {"$regex": term, "$options": "i"}},
+            {"to_email": {"$regex": term, "$options": "i"}},
             {"company": {"$regex": term, "$options": "i"}},
             {"body_preview": {"$regex": term, "$options": "i"}},
         ]
@@ -94,7 +101,8 @@ async def list_hr_inbox(
     # Calculate badge counts
     counts = {
         "all": await HRInbox.find({"tenant_id": tenant_id, "is_relevant": True}).count(),
-        "hr": await HRInbox.find({"tenant_id": tenant_id, "category": CATEGORY_HR_RECRUITER}).count(),
+        "received": await HRInbox.find({"tenant_id": tenant_id, "is_relevant": True, "direction": "in"}).count(),
+        "sent": await HRInbox.find({"tenant_id": tenant_id, "is_relevant": True, "direction": "out"}).count(),
         "interviews": await HRInbox.find({"tenant_id": tenant_id, "category": CATEGORY_INTERVIEW_INVITATION}).count(),
         "applications": await HRInbox.find({"tenant_id": tenant_id, "category": CATEGORY_APPLICATION_CONFIRMATION}).count(),
         "rejections": await HRInbox.find({"tenant_id": tenant_id, "category": CATEGORY_REJECTION}).count(),
@@ -221,11 +229,13 @@ async def reply_to_hr_email(
     if not subj.lower().startswith("re:"):
         subj = f"Re: {subj}"
 
+    target_email = item.to_email if item.direction == "out" else item.sender_email
+
     # Enqueue outbound email using existing SendingService
     msg = await SendingService.enqueue_email_send(
         tenant_id=user.tenant_id,
         user_id=user.id,
-        to_address_str=item.sender_email,
+        to_address_str=target_email,
         subject=subj,
         body_html=req.body_html
     )
@@ -233,7 +243,7 @@ async def reply_to_hr_email(
     return {
         "status": "sent",
         "message_id": msg.id,
-        "to": item.sender_email,
+        "to": target_email,
         "subject": subj,
         "at": msg.at.isoformat()
     }
@@ -254,7 +264,21 @@ async def sync_hr_inbox(
         except Exception as e:
             log.warning("manual_sync_account_failed", account_id=acc.id, error=str(e))
 
-    # Backfill: check for any existing inbound messages not yet in HRInbox
+    # 1. Clean up any past mistakenly saved non-HR entries (Slice bank, Render, Amazon, etc.)
+    from app.services.ai.hr_classifier import NON_HR_DOMAINS, TRANSACTIONAL_SUBJECT_KEYWORDS
+    for dom in NON_HR_DOMAINS:
+        await HRInbox.find({
+            "tenant_id": user.tenant_id,
+            "sender_email": {"$regex": dom, "$options": "i"}
+        }).update({"$set": {"is_relevant": False, "needs_manual_review": False, "category": "OTHER"}})
+
+    for junk_pattern in TRANSACTIONAL_SUBJECT_KEYWORDS:
+        await HRInbox.find({
+            "tenant_id": user.tenant_id,
+            "subject": {"$regex": junk_pattern, "$options": "i"}
+        }).update({"$set": {"is_relevant": False, "needs_manual_review": False, "category": "OTHER"}})
+
+    # 2. Backfill: check for any existing inbound messages not yet in HRInbox
     inbound_msgs = await Message.find(Message.tenant_id == user.tenant_id, Message.dir == "in").sort("-at").limit(100).to_list()
     backfilled_count = 0
     for m in inbound_msgs:
@@ -275,7 +299,20 @@ async def sync_hr_inbox(
                 await HRClassifierService.process_inbound_email(acc, item_dict, m, user_id=user.id)
                 backfilled_count += 1
             except Exception as ex:
-                log.warning("backfill_error", mid=mid, error=str(ex))
+                log.warning("inbound_backfill_error", mid=mid, error=str(ex))
+
+    # 3. Backfill: check for any outbound job applications not yet in HRInbox
+    outbound_msgs = await Message.find(Message.tenant_id == user.tenant_id, Message.dir == "out").sort("-at").limit(100).to_list()
+    for m in outbound_msgs:
+        mid = m.provider_message_id or f"msg_{m.id}"
+        exists = await HRInbox.find_one(HRInbox.user_id == user.id, HRInbox.gmail_message_id == mid)
+        if not exists:
+            try:
+                acc = accounts[0] if accounts else None
+                await HRClassifierService.process_outbound_email(message=m, account=acc, user_id=user.id)
+                backfilled_count += 1
+            except Exception as ex:
+                log.warning("outbound_backfill_error", mid=mid, error=str(ex))
 
     return {
         "status": "ok",

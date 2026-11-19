@@ -64,6 +64,7 @@ import {
   toast,
   fetchApplyMetrics,
   fetchJobPosters,
+  fetchRoleResumes,
   uploadJobPoster,
   analyzeJobPoster,
   generateJdForPoster,
@@ -564,11 +565,12 @@ export default function ApplyStudio() {
     [setEdges]
   );
 
-  // Load initial workflows and metrics
+  // Load initial workflows, metrics, and role resumes
   useEffect(() => {
     fetchWorkflows();
     fetchApplyMetrics();
     fetchJobPosters();
+    fetchRoleResumes();
   }, []);
 
   // Sync loaded workflow into canvas nodes and edges
@@ -2017,7 +2019,11 @@ export default function ApplyStudio() {
                   </div>
 
                   {/* Resume Matching & Stored Resumes List (Requirement 3: List of stored role resumes in Match Best Resume settings) */}
-                  {(selectedNode.data?.category === "resume" || selectedNode.type === "matchResume") && (
+                  {(selectedNode.data?.category === "resume" ||
+                    selectedNode.type === "matchResume" ||
+                    String(selectedNode.id || "").toLowerCase().includes("resume") ||
+                    String(selectedNode.data?.label || "").toLowerCase().includes("resume") ||
+                    String(selectedNode.data?.description || "").toLowerCase().includes("resume")) && (
                     <div className="space-y-4 rounded-xl border border-purple-200 dark:border-purple-900/50 bg-purple-50/30 dark:bg-purple-950/20 p-4">
                       {/* Strategy Dropdown */}
                       <div>

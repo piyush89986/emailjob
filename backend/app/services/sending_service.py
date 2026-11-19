@@ -106,6 +106,13 @@ class SendingService:
         audit = AuditRepo(tenant_id)
         await audit.log_action("send_email", user_id=user_id, target_type="message", target_id=message.id, details={"to": recipients, "subject": subject})
 
+        # Record into HRInbox as outbound recruiter / job application email
+        try:
+            from app.services.ai.hr_classifier import HRClassifierService
+            await HRClassifierService.process_outbound_email(account=account, message=message, user_id=user_id)
+        except Exception as e:
+            log.warning("hr_inbox_outbound_record_failed", error=str(e))
+
         # 4. Dispatch sending to ARQ worker or asyncio task
         await SendingService._dispatch_send_job(message.id, tenant_id)
 

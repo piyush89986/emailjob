@@ -181,6 +181,7 @@ export interface HRInboxItem {
   id: string;
   tenant_id: string;
   user_id: string;
+  direction?: "in" | "out";
   gmail_message_id: string;
   gmail_thread_id?: string;
   email_account_id?: string;
@@ -213,6 +214,8 @@ export interface HRInboxItem {
 
 export interface HRCounts {
   all: number;
+  received?: number;
+  sent?: number;
   hr: number;
   interviews: number;
   applications: number;
@@ -825,7 +828,7 @@ export async function fetchHRInbox(filter = "all", q?: string, page = 1) {
     const res = await api.get("/hr-inbox", { params });
     set(() => ({
       hrInbox: res.data.items || [],
-      hrCounts: res.data.counts || { all: 0, hr: 0, interviews: 0, applications: 0, rejections: 0, unread: 0, review: 0 },
+      hrCounts: res.data.counts || { all: 0, received: 0, sent: 0, hr: 0, interviews: 0, applications: 0, rejections: 0, unread: 0, review: 0 },
       hrUnreadCount: res.data.counts?.unread || 0,
     }));
     return res.data;

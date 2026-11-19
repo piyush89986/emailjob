@@ -47,6 +47,38 @@ from app.models.hr_inbox import (
 from app.models.message import Message
 from app.services.ai.llm_router import LLMRouter
 
+NON_HR_DOMAINS = (
+    "render.com", "kaggle.com", "canva.com", "figma.com", "snapchat.com",
+    "github.com", "gitlab.com", "vercel.com", "netlify.com", "aws.amazon.com",
+    "develop.amazon.com", "amazon.in", "amazon.com", "flipkart.com", "slice.bank",
+    "slice.bank.in", "angelbroking.in", "zerodha.com", "groww.in", "paytm.com",
+    "google.com", "accounts.google.com", "security.google.com", "openai.com",
+    "anthropic.com", "claude.com", "redditmail.com", "twitter.com", "x.com",
+    "facebookmail.com", "instagram.com", "spotify.com", "netflix.com",
+    "uber.com", "zomato.com", "swiggy.com", "hotstar.com", "postman.com",
+    "cloudinary.com", "stripe.com", "paypal.com", "mponline.gov.in",
+    "hdfcbank.com", "icicibank.com", "sbi.co.in", "axisbank.com", "kotak.com",
+    "cred.club", "onecard.co.in"
+)
+
+TRANSACTIONAL_SUBJECT_KEYWORDS = (
+    "spent on your credit card", "transaction alert", "otp", "one time password",
+    "deploy failed", "deploy succeeded", "verify your email", "sign-in", "login attempt",
+    "billing statement", "invoice", "payment receipt", "statement for account",
+    "password reset", "security alert"
+)
+
+JOB_KEYWORDS = (
+    "hr", "recruiter", "recruiting", "recruitment", "talent", "hiring",
+    "job", "career", "interview", "opportunity", "opening", "position",
+    "application", "applicant", "applied", "shortlist", "shortlisted",
+    "assessment", "coding test", "take-home", "screening", "offer letter",
+    "formal offer", "compensation", "resume", "curriculum vitae", "cv",
+    "candidate", "onboarding", "joining", "rejection", "mern", "developer",
+    "engineer", "full stack", "frontend", "backend", "internship", "intern",
+    "calendly.com", "hackerrank.com", "codility.com", "codesignal.com"
+)
+
 log = get_logger("hr_classifier")
 settings = get_settings()
 
@@ -147,12 +179,13 @@ class HRClassifierService:
         )
 
         is_relevant = classification.category in RELEVANT_HR_CATEGORIES
-        needs_review = classification.confidence < 0.70 or classification.category == CATEGORY_OTHER
+        needs_review = classification.category == CATEGORY_OTHER and classification.confidence < 0.70
 
         # 4. Save to HRInbox collection
         hr_record = HRInbox(
             tenant_id=tenant_id,
             user_id=user_id,
+            direction="in",
             gmail_message_id=p_mid,
             gmail_thread_id=p_tid,
             email_account_id=account.id,
@@ -219,6 +252,81 @@ class HRClassifierService:
         return hr_record
 
     @classmethod
+    async def process_outbound_email(
+        cls,
+        message: Message,
+        account: Optional[EmailAccount] = None,
+        user_id: Optional[str] = None
+    ) -> Optional[HRInbox]:
+        """Saves an outbound cold application or recruiter outreach email into HRInbox."""
+        tenant_id = message.tenant_id
+        resolved_user_id = user_id or (getattr(account, "user_id", None) if account else None)
+        if not resolved_user_id:
+            from app.models.user import User
+            user_obj = await User.find_one(User.tenant_id == tenant_id)
+            resolved_user_id = user_obj.id if user_obj else tenant_id
+
+        user_id = resolved_user_id
+        p_mid = message.provider_message_id or f"msg_{message.id}"
+
+        existing = await HRInbox.find_one(
+            HRInbox.user_id == user_id,
+            HRInbox.gmail_message_id == p_mid
+        )
+        if existing:
+            return existing
+
+        to_email = message.to_addrs[0] if message.to_addrs else ""
+        body_preview = clean_text_preview(message.body, 400)
+
+        # Context matching
+        matched_app, _ = await cls._find_application_context(
+            tenant_id=tenant_id,
+            sender_email=to_email,
+            subject=message.subject,
+            p_tid=message.thread_id,
+            body_preview=body_preview
+        )
+
+        sender_email = (account.address if account else message.from_addr) or "me"
+
+        hr_record = HRInbox(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            direction="out",
+            gmail_message_id=p_mid,
+            gmail_thread_id=message.thread_id,
+            email_account_id=account.id if account else None,
+            sender_name="You",
+            sender_email=sender_email,
+            to_email=to_email,
+            subject=message.subject,
+            body_preview=body_preview,
+            body_html=message.body,
+            received_at=message.at or datetime.now(timezone.utc),
+            category=CATEGORY_APPLICATION_CONFIRMATION,
+            confidence_score=1.0,
+            is_relevant=True,
+            needs_manual_review=False,
+            classification_reasoning="Outbound job application sent to recruiter",
+            company=matched_app.company if matched_app else None,
+            job_title=matched_app.title if matched_app else None,
+            application_id=matched_app.id if matched_app else None,
+            is_read=True,
+            is_archived=False,
+        )
+
+        try:
+            await hr_record.insert()
+            log.info("hr_inbox_outbound_recorded", id=hr_record.id, to=to_email)
+        except Exception as e:
+            if "duplicate" in str(e).lower() or "11000" in str(e):
+                return await HRInbox.find_one(HRInbox.user_id == user_id, HRInbox.gmail_message_id == p_mid)
+            raise e
+
+        return hr_record
+
+    @classmethod
     async def _find_application_context(
         cls,
         tenant_id: str,
@@ -277,6 +385,32 @@ class HRClassifierService:
         s_email_lower = sender_email.lower()
         sub_lower = subject.lower()
         body_lower = body_preview.lower()
+
+        # Step 0: Strictly filter out automated non-HR tech & transactional services early
+        if any(dom in s_email_lower for dom in NON_HR_DOMAINS):
+            return ClassificationResult(
+                category=CATEGORY_OTHER,
+                confidence=0.99,
+                reasoning="Automated non-HR service or transactional notification"
+            )
+
+        if any(kw in sub_lower for kw in TRANSACTIONAL_SUBJECT_KEYWORDS):
+            return ClassificationResult(
+                category=CATEGORY_OTHER,
+                confidence=0.99,
+                reasoning="Transactional notification or security alert"
+            )
+
+        # Step 0.5: Require explicit job/HR/career keywords if not part of an existing tracked application
+        has_app_ctx = bool(app_context_str and "Candidate applied for" in app_context_str)
+        text_for_kw = f"{sender_name} {s_email_lower} {sub_lower} {body_lower}"
+        has_job_signal = has_app_ctx or any(re.search(r"\b" + re.escape(kw) + r"\b", text_for_kw) for kw in JOB_KEYWORDS)
+        if not has_job_signal:
+            return ClassificationResult(
+                category=CATEGORY_OTHER,
+                confidence=0.95,
+                reasoning="Email lacks HR, job, career, or interview keywords"
+            )
 
         # Step A: Gmail Label Pre-filtering (Requirement 2)
         # Exclude promotional, social, and forum emails early

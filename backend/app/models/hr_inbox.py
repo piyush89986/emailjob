@@ -42,6 +42,7 @@ RELEVANT_HR_CATEGORIES = {
     CATEGORY_ASSESSMENT,
     CATEGORY_REJECTION,
     CATEGORY_OFFER_RECEIVED,
+    CATEGORY_JOB_ALERT,
 }
 
 
@@ -57,6 +58,7 @@ class HRInbox(Document):
     sender_name: str = ""
     sender_email: str
     to_email: str = ""
+    direction: str = "in"  # "in" (received from recruiter) | "out" (sent to recruiter)
 
     # Content
     subject: str = "No subject"
