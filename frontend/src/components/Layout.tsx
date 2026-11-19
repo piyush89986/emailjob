@@ -1,5 +1,22 @@
+import { useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Inbox, PenSquare, FileText, Users, Briefcase, FileBadge, Settings, Moon, Sun, LogOut, AlertTriangle, Sparkles } from "lucide-react";
+import {
+  LayoutDashboard,
+  Inbox,
+  PenSquare,
+  FileText,
+  Users,
+  Briefcase,
+  FileBadge,
+  Settings,
+  Moon,
+  Sun,
+  LogOut,
+  AlertTriangle,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { logout, toggleDark, useS } from "@/lib/store";
 import { Toaster } from "./ui";
 
@@ -21,18 +38,45 @@ export default function Layout() {
   const user = useS((s) => s.user);
   const reauth = useS((s) => s.accounts.some((a) => a.status !== "connected"));
 
+  // Sidebar collapse state with localStorage persistence
+  const [collapsed, setCollapsed] = useState(() => {
+    return localStorage.getItem("jobmail_sidebar_collapsed") === "true";
+  });
+
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem("jobmail_sidebar_collapsed", String(next));
+  };
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex-col md:flex-row">
       {/* Sidebar: Fixed on left on desktop, top bar on mobile */}
-      <aside className="shrink-0 border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900 md:w-60 md:border-b-0 md:border-r md:p-4 md:h-screen md:overflow-y-auto flex flex-col justify-between z-20">
+      <aside
+        className={`relative shrink-0 border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900 ${
+          collapsed ? "md:w-16 md:p-2.5" : "md:w-60 md:p-4"
+        } md:border-b-0 md:border-r md:h-screen md:overflow-y-auto flex flex-col justify-between z-20 transition-all duration-300 ease-in-out`}
+      >
+        {/* Desktop Expand/Collapse Arrow Button on border edge */}
+        <button
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="hidden md:flex absolute -right-3 top-5 z-30 h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-100 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition-all cursor-pointer"
+        >
+          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
+
         <div>
           {/* Header row: on desktop JobMail; on mobile JobMail + actions */}
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white text-sm shadow-sm">
+          <div className={`mb-3 flex items-center ${collapsed ? "justify-center" : "justify-between"}`}>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white text-sm shadow-sm shrink-0">
                 J
               </div>
-              <span className="text-lg font-bold tracking-tight">BJob</span>
+              {!collapsed && (
+                <span className="text-lg font-bold tracking-tight truncate">BJob</span>
+              )}
             </div>
 
             {/* Mobile-only action buttons */}
@@ -61,20 +105,27 @@ export default function Layout() {
                 key={to}
                 to={to}
                 end={to === "/"}
+                title={collapsed ? label : undefined}
                 className={({ isActive }) =>
-                  `flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
+                  `relative flex shrink-0 items-center ${
+                    collapsed ? "md:justify-center md:px-2" : "gap-2.5 px-2.5"
+                  } rounded-lg py-2 text-sm font-medium transition-colors ${
                     isActive
                       ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400 font-semibold"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                   }`
                 }
               >
-                <Icon size={17} />
-                <span>{label}</span>
+                <Icon size={18} className="shrink-0" />
+                {!collapsed && <span className="truncate">{label}</span>}
                 {label === "Inbox" && unread > 0 && (
-                  <span className="ml-auto rounded-full bg-indigo-600 px-1.5 py-0.2 text-xs font-semibold text-white">
-                    {unread}
-                  </span>
+                  collapsed ? (
+                    <span className="hidden md:block absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-indigo-600 ring-2 ring-white dark:ring-slate-900" />
+                  ) : (
+                    <span className="ml-auto rounded-full bg-indigo-600 px-1.5 py-0.2 text-xs font-semibold text-white">
+                      {unread}
+                    </span>
+                  )
                 )}
               </NavLink>
             ))}
@@ -82,22 +133,31 @@ export default function Layout() {
         </div>
 
         {/* Desktop-only footer in sidebar with User info, Theme toggle, and Logout */}
-        <div className="hidden border-t border-slate-200 pt-3 dark:border-slate-800 md:flex md:items-center md:justify-between md:gap-2 mt-auto">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 text-xs font-bold">
+        <div
+          className={`hidden border-t border-slate-200 pt-3 dark:border-slate-800 md:flex ${
+            collapsed ? "flex-col items-center gap-2" : "items-center justify-between gap-2"
+          } mt-auto`}
+        >
+          <div className={`flex items-center ${collapsed ? "justify-center" : "gap-2"} min-w-0 flex-1`}>
+            <div
+              title={user?.email || "Account"}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 text-xs font-bold"
+            >
               {user?.email ? user.email[0].toUpperCase() : "U"}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium text-slate-800 dark:text-slate-200">
-                {user?.email || "Account"}
+            {!collapsed && (
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-medium text-slate-800 dark:text-slate-200">
+                  {user?.email || "Account"}
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span>Active</span>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                <span>Active</span>
-              </div>
-            </div>
+            )}
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className={`flex items-center ${collapsed ? "flex-col gap-1" : "gap-1"} shrink-0`}>
             <button
               onClick={toggleDark}
               aria-label="Toggle dark mode"
