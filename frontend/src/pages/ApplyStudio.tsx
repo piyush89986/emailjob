@@ -742,8 +742,39 @@ export default function ApplyStudio() {
       updateSkill("skill-vision", { status: "running", message: "Uploading poster and extracting job details with Vision AI..." });
       log("info", "Vision OCR", `Sending poster (${selectedFile.name}) to AI Vision model...`);
 
-      const poster = await uploadJobPoster(selectedFile, true);
-      setActivePoster(poster);
+      let poster: JobPoster;
+      try {
+        poster = await uploadJobPoster(selectedFile, true);
+        setActivePoster(poster);
+      } catch (uploadErr: any) {
+        const errDetail =
+          uploadErr.response?.data?.detail ||
+          uploadErr.response?.data?.error?.message ||
+          uploadErr.response?.data?.error ||
+          uploadErr.message ||
+          "Upload failed";
+        updateSkill("skill-vision", {
+          status: "error",
+          message: "Upload / AI Vision extraction failed",
+          error: `Dikkat: Image upload fail ho gaya (${errDetail})`
+        });
+        log("error", "Vision OCR", `Dikkat: Poster upload failed: ${errDetail}`);
+        setLivePipelineStatus("error");
+        setIsUploading(false);
+        return;
+      }
+
+      if (poster.status === "failed") {
+        updateSkill("skill-vision", {
+          status: "error",
+          message: "AI Vision analysis could not process the poster",
+          error: `Dikkat: ${poster.error_message || "Vision extraction failed on backend"}`
+        });
+        log("error", "Vision OCR", `Dikkat: ${poster.error_message || "Vision extraction failed on backend"}`);
+        setLivePipelineStatus("error");
+        setIsUploading(false);
+        return;
+      }
 
       const extracted = poster.extracted_data || {
         required_skills: [],
@@ -1072,6 +1103,25 @@ export default function ApplyStudio() {
               <Clock size={14} /> Application History
             </button>
           </div>
+
+          {/* Option to see logs */}
+          <button
+            onClick={() => setShowLiveAudit(true)}
+            className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+            title="Open Live Automation & Skills Diagnostic Logs"
+          >
+            <Terminal size={14} className="text-indigo-500" />
+            <span>Audit Logs</span>
+            {livePipelineStatus === "running" && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
+            )}
+            {livePipelineStatus === "attention_needed" && (
+              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+            )}
+            {livePipelineStatus === "error" && (
+              <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+            )}
+          </button>
         </div>
       }
     >
@@ -1256,8 +1306,23 @@ export default function ApplyStudio() {
               )}
             </div>
 
-            {/* Launch Action Button */}
-            <div className="mt-4 flex justify-end">
+            {/* Launch Action Button & View Logs Option */}
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setShowLiveAudit(true)}
+                className="btn text-xs py-2 px-3.5 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 rounded-xl shadow-xs"
+                title="Open Live Automation & Diagnostic Logs"
+              >
+                <Terminal size={14} className="text-indigo-500" />
+                <span className="font-semibold">View Automation Logs</span>
+                {pipelineLogs.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-slate-200 dark:bg-slate-700 rounded-full font-mono text-slate-600 dark:text-slate-300">
+                    {pipelineLogs.length} events
+                  </span>
+                )}
+              </button>
+
               <button
                 disabled={!selectedFile || isUploading}
                 onClick={handleAnalyzeAndLaunch}
@@ -1381,6 +1446,14 @@ export default function ApplyStudio() {
             >
               <Play size={13} className="text-emerald-500" />
               <span>Test Run</span>
+            </button>
+            <button
+              onClick={() => setShowLiveAudit(true)}
+              className="btn text-xs py-2 px-3 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-slate-800 dark:text-slate-100 shadow-xs"
+              title="Open Live Automation & Diagnostic Logs"
+            >
+              <Terminal size={14} className="text-indigo-500" />
+              <span>Logs</span>
             </button>
           </div>
 
@@ -2039,7 +2112,22 @@ export default function ApplyStudio() {
                   <span className="flex items-center gap-1.5 font-mono">
                     <Terminal size={13} /> Execution Log Stream
                   </span>
-                  <span className="text-[10px] text-slate-400">{pipelineLogs.length} events logged</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-400 font-mono">{pipelineLogs.length} events logged</span>
+                    {pipelineLogs.length > 0 && (
+                      <button
+                        onClick={() => {
+                          const text = pipelineLogs.map((l) => `[${l.timestamp}] [${l.skill}] [${l.level.toUpperCase()}]: ${l.text}`).join("\n");
+                          navigator.clipboard.writeText(text);
+                          toast("Logs copied to clipboard", "ok");
+                        }}
+                        className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800"
+                        title="Copy all logs"
+                      >
+                        <Copy size={11} /> Copy
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="rounded-xl bg-slate-950 border border-slate-800 p-3.5 font-mono text-[11px] h-44 overflow-y-auto space-y-1.5 text-slate-300 shadow-inner">

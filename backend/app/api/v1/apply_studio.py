@@ -110,16 +110,23 @@ async def upload_job_poster(
     attachment_id = None
 
     if CloudinaryService.is_configured():
-        res = await CloudinaryService.upload_file(contents, filename, content_type)
-        if res:
-            storage_type = "cloudinary"
-            file_url = res["url"]
-            cloudinary_id = res["public_id"]
+        try:
+            res = CloudinaryService.upload_file(contents, filename, content_type)
+            if res:
+                storage_type = "cloudinary"
+                file_url = res["url"]
+                cloudinary_id = res["public_id"]
+        except Exception as ce:
+            log.warning("cloudinary_upload_failed_fallback_local", error=str(ce))
 
     if not file_url:
-        att = await StorageService.save_attachment(tenant_id, filename, content_type, contents)
-        attachment_id = att.id
-        file_url = f"/attachments/{att.id}"
+        try:
+            att = await StorageService.save_attachment(tenant_id, filename, content_type, contents)
+            attachment_id = att.id
+            file_url = f"/attachments/{att.id}"
+        except Exception as se:
+            log.warning("attachment_storage_failed", error=str(se))
+            file_url = f"/attachments/local_{filename}"
 
     poster = JobPoster(
         tenant_id=tenant_id,

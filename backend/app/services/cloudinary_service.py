@@ -61,6 +61,41 @@ class CloudinaryService:
             return None
 
     @classmethod
+    def upload_file(
+        cls,
+        file_bytes: bytes,
+        filename: str,
+        content_type: str = "image/png",
+        folder: str = "jobmail/posters"
+    ) -> Optional[Dict[str, Any]]:
+        """Upload any file (e.g. job poster image or PDF) to Cloudinary if configured."""
+        if not cls.is_configured():
+            return None
+
+        try:
+            cls.init()
+            safe_filename = "".join(c for c in filename if c.isalnum() or c in ("-", "_", ".")).rsplit(".", 1)[0]
+            public_id = f"poster_{safe_filename}_{uuid.uuid4().hex[:6]}"
+
+            result = cloudinary.uploader.upload(
+                file_bytes,
+                resource_type="auto",
+                folder=folder,
+                public_id=public_id,
+                use_filename=True,
+                unique_filename=True
+            )
+            return {
+                "url": result.get("secure_url") or result.get("url"),
+                "public_id": result.get("public_id"),
+                "bytes": result.get("bytes", len(file_bytes)),
+                "format": result.get("format", filename.split(".")[-1] if "." in filename else "png")
+            }
+        except Exception as e:
+            log.error("cloudinary_upload_file_failed", error=str(e), filename=filename)
+            return None
+
+    @classmethod
     def delete_file(cls, public_id: str) -> bool:
         if not cls.is_configured() or not public_id:
             return False
