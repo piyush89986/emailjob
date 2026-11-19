@@ -31,6 +31,7 @@ class WorkflowSettings(BaseModel):
     max_daily_apps: int = 25
     follow_up_days: int = 5
     max_follow_ups: int = 2
+    execution_mode: str = "syn"  # "syn" (halt on node failure) | "asyn" (continue on failure)
 
 
 class AutomationWorkflow(Document):

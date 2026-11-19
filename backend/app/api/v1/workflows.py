@@ -47,6 +47,7 @@ class ExecuteWorkflowRequest(BaseModel):
     job_poster_id: Optional[str] = None
     is_test_run: bool = False
     context_data: Optional[Dict[str, Any]] = None
+    execution_mode: Optional[str] = None  # "syn" | "asyn"
 
 
 def get_default_workflow_nodes_and_edges():
@@ -234,13 +235,16 @@ async def execute_workflow(
     if not wf:
         raise NotFoundError("Workflow not found")
 
+    mode = req.execution_mode or getattr(wf.settings, "execution_mode", "syn") or "syn"
+
     execution = await WorkflowEngine.run_workflow(
         tenant_id=user.tenant_id,
         user_id=user.id,
         workflow=wf,
         job_poster_id=req.job_poster_id,
         initial_context=req.context_data,
-        is_test_run=req.is_test_run
+        is_test_run=req.is_test_run,
+        execution_mode=mode
     )
     return execution
 

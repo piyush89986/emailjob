@@ -147,6 +147,7 @@ export interface AutomationWorkflow {
     max_daily_apps?: number;
     follow_up_days?: number;
     max_follow_ups?: number;
+    execution_mode?: "syn" | "asyn";
   };
   created_at: string;
   updated_at: string;
@@ -979,11 +980,13 @@ export async function toggleWorkflowActive(id: string, activate: boolean) {
   }
 }
 
-export async function executeWorkflow(workflowId: string, posterId?: string, isTest = false): Promise<WorkflowExecution> {
+export async function executeWorkflow(workflowId: string, posterId?: string, isTest = false, executionMode?: "syn" | "asyn"): Promise<WorkflowExecution> {
   try {
+    const mode = executionMode || (localStorage.getItem("jobmail_exec_mode") as any) || "syn";
     const res = await api.post(`/workflows/${workflowId}/execute`, {
       job_poster_id: posterId,
-      is_test_run: isTest
+      is_test_run: isTest,
+      execution_mode: mode
     });
     const exec: WorkflowExecution = res.data;
     if (exec.status === "completed") {

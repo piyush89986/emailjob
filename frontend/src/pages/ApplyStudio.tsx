@@ -42,6 +42,7 @@ import {
   MapPin,
   DollarSign,
   Briefcase,
+  MinusCircle,
   X,
   FileCheck,
   Plus,
@@ -386,7 +387,7 @@ export interface SkillStatus {
   id: string;
   name: string;
   skillType: string;
-  status: "idle" | "running" | "completed" | "warning" | "error";
+  status: "idle" | "running" | "completed" | "warning" | "error" | "skipped";
   message?: string;
   details?: string;
   error?: string;
@@ -824,10 +825,61 @@ export default function ApplyStudio() {
       setPipelineSkills((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
     };
 
+    // Helper for handling node/step failures according to Execution Mode (syn vs asyn)
+    // syn: If a node fails, execution STOPS immediately and subsequent nodes will NOT run.
+    // asyn: If a node fails, it logs an issue and CONTINUES executing subsequent nodes.
+    const handleStepFailure = (
+      skillId: string,
+      skillName: string,
+      errorMessage: string,
+      remainingSkillIds: string[]
+    ): boolean => {
+      if (executionMode === "syn") {
+        updateSkill(skillId, {
+          status: "error",
+          message: `${skillName} failed: Execution stopped`,
+          error: `Dikkat: ${errorMessage}`
+        });
+        log("error", skillName, `Dikkat in ${skillName}: ${errorMessage}`);
+        log(
+          "error",
+          "System",
+          `⛔ Pipeline STOPPED in Synchronous (Syn) mode because "${skillName}" failed. Subsequent nodes will NOT run.`
+        );
+
+        // Mark all subsequent nodes as skipped
+        remainingSkillIds.forEach((id) => {
+          updateSkill(id, {
+            status: "skipped",
+            message: "Skipped: Upstream node failed in Synchronous (Syn) mode"
+          });
+        });
+
+        setLivePipelineStatus("error");
+        setIsUploading(false);
+        toast(`Pipeline stopped (Syn Mode): ${skillName} failed`, "err");
+        return false; // STOP execution immediately!
+      } else {
+        // ASYN MODE: Log warning/error and continue
+        updateSkill(skillId, {
+          status: "warning",
+          message: `${skillName} issue (Continuing in Asyn mode)`,
+          error: `Dikkat: ${errorMessage} (Continuing in Asyn mode)`
+        });
+        log("warning", skillName, `Dikkat in ${skillName}: ${errorMessage}`);
+        log(
+          "warning",
+          "System",
+          `⚡ Asyn Mode: "${skillName}" had an issue, but CONTINUING to next node...`
+        );
+        return true; // CONTINUE execution!
+      }
+    };
+
     log(
       "info",
       "System",
-      `Starting automation pipeline for "${selectedFile.name}" in ${workflowMode === "auto" ? "Automatic Mode" : "Manual Review Mode"} [${executionMode.toUpperCase()}]`
+      `Starting automation pipeline for "${selectedFile.name}" in ${workflowMode === "auto" ? "Automatic Mode" : "Manual Review Mode"} [${executionMode.toUpperCase()} - ${executionMode === "syn" ? "Stop on Failure" : "Continue on Failure"}]`
     );
     setIsUploading(true);
 
@@ -847,27 +899,24 @@ export default function ApplyStudio() {
           uploadErr.response?.data?.error ||
           uploadErr.message ||
           "Upload failed";
-        updateSkill("skill-vision", {
-          status: "error",
-          message: "Upload / AI Vision extraction failed",
-          error: `Dikkat: Image upload fail ho gaya (${errDetail})`
-        });
-        log("error", "Vision OCR", `Dikkat: Poster upload failed: ${errDetail}`);
-        setLivePipelineStatus("error");
-        setIsUploading(false);
+        const ok = handleStepFailure(
+          "skill-vision",
+          "Vision OCR",
+          `Image upload fail ho gaya (${errDetail})`,
+          ["skill-jd", "skill-resume", "skill-gate", "skill-email", "skill-gmail", "skill-tracker"]
+        );
+        if (!ok) return;
         return;
       }
 
       if (poster.status === "failed") {
-        updateSkill("skill-vision", {
-          status: "error",
-          message: "AI Vision analysis could not process the poster",
-          error: `Dikkat: ${poster.error_message || "Vision extraction failed on backend"}`
-        });
-        log("error", "Vision OCR", `Dikkat: ${poster.error_message || "Vision extraction failed on backend"}`);
-        setLivePipelineStatus("error");
-        setIsUploading(false);
-        return;
+        const ok = handleStepFailure(
+          "skill-vision",
+          "Vision OCR",
+          poster.error_message || "Vision extraction failed on backend",
+          ["skill-jd", "skill-resume", "skill-gate", "skill-email", "skill-gmail", "skill-tracker"]
+        );
+        if (!ok) return;
       }
 
       const extracted = poster.extracted_data || {
@@ -905,44 +954,12 @@ export default function ApplyStudio() {
 
       if (isCancelledRef.current) return;
 
+      // --- SKILL 2: Job Description Generator ---
+      updateSkill("skill-jd", { status: "running", message: "Formatting job responsibilities, skills, and qualifications into Markdown JD..." });
+      log("info", "JD Generator", "Formatting job responsibilities, skills, and qualifications into Markdown JD...");
+
       let jdText = "";
-      let matchedResumes: ResumeMatchScore[] = [];
-
-      if (executionMode === "asyn") {
-        // ASYNCHRONOUS MODE: Run JD Generator and Resume Matcher concurrently
-        log("info", "System", "⚡ Asyn Mode: Running JD Generator & Resume Fit Scoring concurrently...");
-        updateSkill("skill-jd", { status: "running", message: "Synthesizing structured Markdown JD (Asyn)..." });
-        updateSkill("skill-resume", { status: "running", message: "Evaluating fit against stored role resumes (Asyn)..." });
-
-        const [jdResult, resumeResult] = await Promise.allSettled([
-          (async () => {
-            const text = poster.generated_jd || (extracted.job_responsibilities?.length ? extracted.job_responsibilities.join("\n") : "Standard job description generated.");
-            setEditableJd(text);
-            return text;
-          })(),
-          matchResumesForPoster(poster.id, extracted)
-        ]);
-
-        jdText = jdResult.status === "fulfilled" ? jdResult.value : (poster.generated_jd || "Standard job description generated.");
-        updateSkill("skill-jd", {
-          status: "completed",
-          message: "Structured Job Description generated successfully",
-          details: `${jdText.length} characters structured`
-        });
-        log("success", "JD Generator", "Markdown Job Description ready for resume matching.");
-
-        if (resumeResult.status === "fulfilled") {
-          matchedResumes = resumeResult.value;
-          setResumeMatches(matchedResumes);
-        } else {
-          log("warning", "Resume Matcher", "Asyn resume matching notice.");
-        }
-      } else {
-        // SYNCHRONOUS MODE: Step-by-step sequential execution
-        // --- SKILL 2: Job Description Generator ---
-        updateSkill("skill-jd", { status: "running", message: "Synthesizing structured Markdown JD..." });
-        log("info", "JD Generator", "Formatting job responsibilities, skills, and qualifications into Markdown JD...");
-
+      try {
         jdText = poster.generated_jd || (extracted.job_responsibilities?.length ? extracted.job_responsibilities.join("\n") : "Standard job description generated.");
         setEditableJd(jdText);
         updateSkill("skill-jd", {
@@ -951,22 +968,29 @@ export default function ApplyStudio() {
           details: `${jdText.length} characters structured`
         });
         log("success", "JD Generator", "Markdown Job Description ready for resume matching.");
-
-        if (isCancelledRef.current) return;
-
-        // --- SKILL 3: AI Resume Matcher & Scorer ---
-        updateSkill("skill-resume", { status: "running", message: "Matching candidate resumes with extracted job criteria..." });
-        log("info", "Resume Matcher", `Evaluating fit against stored role resumes in Resume Builder...`);
-
-        try {
-          matchedResumes = await matchResumesForPoster(poster.id, extracted);
-          setResumeMatches(matchedResumes);
-        } catch (err: any) {
-          log("warning", "Resume Matcher", `Resume matching warning: ${err.message || "Using fallback"}`);
-        }
+      } catch (jdErr: any) {
+        const ok = handleStepFailure(
+          "skill-jd",
+          "JD Generator",
+          jdErr.message || "Failed to generate structured JD",
+          ["skill-resume", "skill-gate", "skill-email", "skill-gmail", "skill-tracker"]
+        );
+        if (!ok) return;
       }
 
       if (isCancelledRef.current) return;
+
+      // --- SKILL 3: AI Resume Matcher & Scorer ---
+      updateSkill("skill-resume", { status: "running", message: "Matching candidate resumes with extracted job criteria..." });
+      log("info", "Resume Matcher", "Evaluating fit against stored role resumes in Resume Builder...");
+
+      let matchedResumes: ResumeMatchScore[] = [];
+      try {
+        matchedResumes = await matchResumesForPoster(poster.id, extracted);
+        setResumeMatches(matchedResumes);
+      } catch (err: any) {
+        log("warning", "Resume Matcher", `Resume matching notice: ${err.message || "Using fallback"}`);
+      }
 
       const bestMatch = matchedResumes.length > 0 ? matchedResumes[0] : null;
       if (bestMatch) {
@@ -978,12 +1002,13 @@ export default function ApplyStudio() {
         });
         log("success", "Resume Matcher", `Selected '${bestMatch.role_name}' with fit score ${bestMatch.match_percentage}%`);
       } else {
-        updateSkill("skill-resume", {
-          status: "warning",
-          message: "No specific role resume matched. Using standard profile.",
-          error: "Dikkat: Resume Builder mein koi specific resume nahi mila. Resume section mein resume upload karein."
-        });
-        log("warning", "Resume Matcher", "Dikkat: No saved role resumes found in Resume Builder.");
+        const ok = handleStepFailure(
+          "skill-resume",
+          "Resume Matcher",
+          "No saved role resumes found in Resume Builder. Please upload a resume first.",
+          ["skill-gate", "skill-email", "skill-gmail", "skill-tracker"]
+        );
+        if (!ok) return;
       }
 
       if (isCancelledRef.current) return;
@@ -994,25 +1019,23 @@ export default function ApplyStudio() {
 
       const hasHrEmail = Boolean(extracted.hr_email && extracted.hr_email.includes("@"));
       const matchScore = bestMatch ? bestMatch.match_percentage : (extracted.required_skills?.length > 0 ? 70 : 50);
-      let gateHasIssue = false;
 
       if (!hasHrEmail) {
-        gateHasIssue = true;
-        updateSkill("skill-gate", {
-          status: "warning",
-          message: "Recruiter HR email not found on poster",
-          error: "Dikkat: Recruiter HR email nahi mila. Sending ke liye valid recipient email required hai."
-        });
-        log("warning", "Safety Gate", "Dikkat: Recruiter HR email missing from poster.");
+        const ok = handleStepFailure(
+          "skill-gate",
+          "Safety Gate",
+          "Recruiter HR email missing from poster",
+          ["skill-email", "skill-gmail", "skill-tracker"]
+        );
+        if (!ok) return;
       } else if (matchScore < 75) {
-        gateHasIssue = true; // Hold auto-dispatch for low match score!
-        updateSkill("skill-gate", {
-          status: "warning",
-          message: `Match score ${matchScore}% is below standard 75% threshold`,
-          details: `HR email verified: ${extracted.hr_email}`,
-          error: `Dikkat: Match score (${matchScore}%) minimum 75% threshold se kam hai. Manual verification zaroori hai.`
-        });
-        log("warning", "Safety Gate", `Dikkat: Match score ${matchScore}% below 75% threshold. Auto-send held for safety.`);
+        const ok = handleStepFailure(
+          "skill-gate",
+          "Safety Gate",
+          `Match score (${matchScore}%) is below 75% threshold`,
+          ["skill-email", "skill-gmail", "skill-tracker"]
+        );
+        if (!ok) return;
       } else {
         updateSkill("skill-gate", {
           status: "completed",
@@ -1059,13 +1082,14 @@ export default function ApplyStudio() {
           log("success", "Email Drafter", `AI email generated: '${emailDraft.subject}'`);
         }
       } catch (err: any) {
-        gateHasIssue = true; // If drafting fails, do NOT auto-send!
-        updateSkill("skill-email", {
-          status: "error",
-          message: "Failed to generate email draft",
-          error: `Dikkat: ${err.response?.data?.detail || err.message || "Email drafting error"}`
-        });
-        log("error", "Email Drafter", `Dikkat in Email Drafter: ${err.response?.data?.detail || err.message}`);
+        const errDetail = err.response?.data?.detail || err.message || "Email drafting error";
+        const ok = handleStepFailure(
+          "skill-email",
+          "Email Drafter",
+          errDetail,
+          ["skill-gmail", "skill-tracker"]
+        );
+        if (!ok) return;
       }
 
       if (isCancelledRef.current) return;
@@ -1073,7 +1097,15 @@ export default function ApplyStudio() {
       // --- SKILL 6 & 7: Gmail Dispatcher & Application Tracker ---
       if (workflowMode === "auto") {
         const recipient = emailDraft?.to_email || extracted.hr_email;
-        if (recipient && !gateHasIssue && emailDraft && emailDraft.body_html) {
+        if (!recipient || !emailDraft?.body_html) {
+          const ok = handleStepFailure(
+            "skill-gmail",
+            "Gmail Dispatcher",
+            "Cannot dispatch email: Missing recipient HR address or email body",
+            ["skill-tracker"]
+          );
+          if (!ok) return;
+        } else {
           updateSkill("skill-gmail", { status: "running", message: `Dispatching application to ${recipient} via Gmail API...` });
           log("info", "Gmail Dispatcher", `Connecting to Gmail API and sending email with resume PDF...`);
 
@@ -1093,50 +1125,35 @@ export default function ApplyStudio() {
               details: "Sent via authorized Gmail account with resume MIME attachment"
             });
             log("success", "Gmail Dispatcher", `Email dispatched via Gmail API to ${recipient}!`);
-
-            updateSkill("skill-tracker", {
-              status: "completed",
-              message: "Application logged in database with real-time tracking active",
-              details: "Tracking replies via Gmail Pub/Sub webhook"
-            });
-            log("success", "Tracker", "Application successfully logged in Tracker. Monitoring responses.");
-
-            setLivePipelineStatus("completed");
-            log("success", "System", "All pipeline skills executed successfully!");
-            toast("Automation completed: Application sent successfully via Gmail!", "ok");
           } catch (err: any) {
-            updateSkill("skill-gmail", {
-              status: "error",
-              message: "Failed to send email via Gmail API",
-              error: `Dikkat: ${err.response?.data?.detail || err.message || "Gmail send error"}`
-            });
-            log("error", "Gmail Dispatcher", `Dikkat: Gmail dispatch failed (${err.message})`);
-            setLivePipelineStatus("error");
+            const errDetail = err.response?.data?.detail || err.message || "Gmail send error";
+            const ok = handleStepFailure(
+              "skill-gmail",
+              "Gmail Dispatcher",
+              errDetail,
+              ["skill-tracker"]
+            );
+            if (!ok) return;
           }
-        } else {
-          // Automatic mode paused because requirements not met
-          let pauseReason = "Recruiter HR email missing";
-          if (!hasHrEmail) {
-            pauseReason = "Recruiter HR email nahi mila";
-          } else if (matchScore < 75) {
-            pauseReason = `Resume fit score (${matchScore}%) threshold (75%) se kam hai`;
-          } else if (!emailDraft || !emailDraft.body_html) {
-            pauseReason = "Cold email draft ready nahi ho paya";
-          }
-
-          updateSkill("skill-gmail", {
-            status: "warning",
-            message: `Auto-send paused: ${pauseReason}`,
-            error: `Dikkat: Auto-send rok diya gaya (${pauseReason}). Review in Studio.`
-          });
-          updateSkill("skill-tracker", {
-            status: "idle",
-            message: "Pending manual approval and recipient verification"
-          });
-          setLivePipelineStatus("attention_needed");
-          log("warning", "System", `Dikkat: Auto-send paused: ${pauseReason}. Review in Studio.`);
-          toast(`Auto-send paused: ${pauseReason}`, "err");
         }
+
+        // --- SKILL 7: Application Tracker ---
+        updateSkill("skill-tracker", { status: "running", message: "Logging application in database and monitoring responses..." });
+        try {
+          updateSkill("skill-tracker", {
+            status: "completed",
+            message: "Application logged in database with real-time tracking active",
+            details: "Tracking replies via Gmail Pub/Sub webhook"
+          });
+          log("success", "Tracker", "Application successfully logged in Tracker. Monitoring responses.");
+        } catch (trackerErr: any) {
+          const ok = handleStepFailure("skill-tracker", "Tracker", trackerErr.message || "Tracker logging error", []);
+          if (!ok) return;
+        }
+
+        setLivePipelineStatus("completed");
+        log("success", "System", `All pipeline skills executed successfully in [${executionMode.toUpperCase()}] mode!`);
+        toast(`Automation completed in ${executionMode.toUpperCase()} mode!`, "ok");
       } else {
         // MANUAL MODE
         updateSkill("skill-gmail", {
@@ -1148,12 +1165,13 @@ export default function ApplyStudio() {
           status: "idle",
           message: "Will be tracked once sent by user"
         });
-        setLivePipelineStatus(gateHasIssue ? "attention_needed" : "completed");
+        setLivePipelineStatus("completed");
         log("info", "System", "Manual Mode: All skills completed. Ready for your review & approval.");
       }
     } catch (err: any) {
       log("error", "System", `Pipeline failed: ${err.message || "Unknown error"}`);
       setLivePipelineStatus("error");
+      toast(`Pipeline error: ${err.message}`, "err");
     } finally {
       setIsUploading(false);
     }
@@ -1352,44 +1370,88 @@ export default function ApplyStudio() {
                   Upload a hiring poster or PDF job description. AI reads the image, selects your best resume, crafts a tailored email, and applies directly via Gmail.
                 </p>
               </div>
-              {/* Interactive Workflow Mode Toggle */}
-              <div className="flex items-center gap-2.5 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-                <span className="text-xs font-semibold px-2 text-slate-600 dark:text-slate-400 hidden sm:inline">
-                  Workflow Mode:
-                </span>
-                <div className="inline-flex rounded-lg bg-white dark:bg-slate-900 p-0.5 border border-slate-200 dark:border-slate-700 shadow-xs">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWorkflowMode("manual");
-                      localStorage.setItem("jobmail_workflow_mode", "manual");
-                      toast("Manual Mode active: You can review and edit each application before sending.");
-                    }}
-                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      workflowMode === "manual"
-                        ? "bg-indigo-600 text-white shadow-xs"
-                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                    }`}
-                  >
-                    <ShieldCheck size={13} />
-                    <span>Manual Mode</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWorkflowMode("auto");
-                      localStorage.setItem("jobmail_workflow_mode", "auto");
-                      toast("Automatic Mode active: AI will analyze, match resume & auto-send via Gmail!");
-                    }}
-                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      workflowMode === "auto"
-                        ? "bg-emerald-600 text-white shadow-xs"
-                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                    }`}
-                  >
-                    <Zap size={13} />
-                    <span>Auto Mode</span>
-                  </button>
+              {/* Studio Hub Controls: Workflow Mode (Manual vs Auto) & Execution Mode (Syn vs Asyn) */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Interactive Workflow Mode Toggle */}
+                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <span className="text-xs font-semibold px-2 text-slate-600 dark:text-slate-400 hidden sm:inline">
+                    Workflow Mode:
+                  </span>
+                  <div className="inline-flex rounded-lg bg-white dark:bg-slate-900 p-0.5 border border-slate-200 dark:border-slate-700 shadow-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWorkflowMode("manual");
+                        localStorage.setItem("jobmail_workflow_mode", "manual");
+                        toast("Manual Mode active: You can review and edit each application before sending.");
+                      }}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                        workflowMode === "manual"
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                    >
+                      <ShieldCheck size={13} />
+                      <span>Manual Mode</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWorkflowMode("auto");
+                        localStorage.setItem("jobmail_workflow_mode", "auto");
+                        toast("Automatic Mode active: AI will analyze, match resume & auto-send via Gmail!");
+                      }}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                        workflowMode === "auto"
+                          ? "bg-emerald-600 text-white shadow-xs"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                    >
+                      <Zap size={13} />
+                      <span>Auto Mode</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Syn / Asyn Execution Mode Toggle */}
+                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <span className="text-xs font-semibold px-2 text-slate-600 dark:text-slate-400 hidden sm:inline" title="Execution Mode">
+                    Pipeline:
+                  </span>
+                  <div className="inline-flex rounded-lg bg-white dark:bg-slate-900 p-0.5 border border-slate-200 dark:border-slate-700 shadow-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExecutionMode("syn");
+                        localStorage.setItem("jobmail_exec_mode", "syn");
+                        toast("Syn (Synchronous) Mode: Node fail hone par agla node nahi chalega (Stop on error)");
+                      }}
+                      className={`px-2.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                        executionMode === "syn"
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                      title="Synchronous: Node fail hone par agla node ruk jayega"
+                    >
+                      syn
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExecutionMode("asyn");
+                        localStorage.setItem("jobmail_exec_mode", "asyn");
+                        toast("Asyn (Asynchronous) Mode: Node fail hone par bhi agla node chalega (Continue on error)");
+                      }}
+                      className={`px-2.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                        executionMode === "asyn"
+                          ? "bg-amber-600 text-white shadow-xs"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                      title="Asynchronous: Node fail hone par bhi agla node chalega"
+                    >
+                      asyn
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1642,7 +1704,10 @@ export default function ApplyStudio() {
                     name: selectedWorkflow.name,
                     nodes: nodes as any,
                     edges: edges as any,
-                    settings: selectedWorkflow.settings,
+                    settings: {
+                      ...selectedWorkflow.settings,
+                      execution_mode: executionMode,
+                    },
                   });
                 }
               }}
@@ -1654,7 +1719,7 @@ export default function ApplyStudio() {
             <button
               onClick={async () => {
                 if (selectedWorkflow) {
-                  const exec = await executeWorkflow(selectedWorkflow.id, undefined, true);
+                  const exec = await executeWorkflow(selectedWorkflow.id, undefined, true, executionMode);
                   setExecutionLogs(exec);
                 }
               }}
@@ -2240,6 +2305,28 @@ export default function ApplyStudio() {
               </div>
 
               <div className="flex items-center gap-2.5">
+                {/* Mode Badges */}
+                <span
+                  className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                  title="Workflow Mode"
+                >
+                  {workflowMode === "auto" ? "⚡ Auto Mode" : "🛡️ Manual Review"}
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                    executionMode === "syn"
+                      ? "border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300"
+                      : "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                  }`}
+                  title={
+                    executionMode === "syn"
+                      ? "Synchronous Mode: Halts immediately if any node fails"
+                      : "Asynchronous Mode: Continues executing even if an intermediate node fails"
+                  }
+                >
+                  {executionMode === "syn" ? "SYN (Stop on Fail)" : "ASYN (Continue on Fail)"}
+                </span>
+
                 {/* Stop Automation Button in Header when running */}
                 {livePipelineStatus === "running" && (
                   <button
@@ -2319,6 +2406,7 @@ export default function ApplyStudio() {
                     const isDone = skill.status === "completed";
                     const isWarn = skill.status === "warning";
                     const isErr = skill.status === "error";
+                    const isSkipped = skill.status === "skipped";
                     const isIdle = skill.status === "idle";
 
                     return (
@@ -2333,6 +2421,8 @@ export default function ApplyStudio() {
                             ? "border-amber-300 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/20"
                             : isErr
                             ? "border-rose-300 dark:border-rose-800 bg-rose-50/30 dark:bg-rose-950/20"
+                            : isSkipped
+                            ? "border-slate-200 dark:border-slate-800/60 bg-slate-100/50 dark:bg-slate-950/30 opacity-60"
                             : "border-slate-200 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-950/40 opacity-70"
                         }`}
                       >
@@ -2348,6 +2438,7 @@ export default function ApplyStudio() {
                             {isDone && <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />}
                             {isWarn && <AlertTriangle size={15} className="text-amber-600 shrink-0" />}
                             {isErr && <XCircle size={15} className="text-rose-600 shrink-0" />}
+                            {isSkipped && <MinusCircle size={15} className="text-slate-400 shrink-0" />}
                             {isIdle && <Clock size={15} className="text-slate-400 shrink-0" />}
 
                             <div className="truncate">
@@ -2380,6 +2471,11 @@ export default function ApplyStudio() {
                             {isErr && (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200">
                                 Error
+                              </span>
+                            )}
+                            {isSkipped && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                Skipped (Syn Mode)
                               </span>
                             )}
                             {isIdle && (
