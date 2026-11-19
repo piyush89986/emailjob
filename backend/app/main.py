@@ -34,6 +34,8 @@ from app.api.v1.account import router as account_router
 from app.api.v1.events import router as events_router
 from app.api.v1.webhooks import router as webhooks_router
 from app.api.v1.role_resumes import router as role_resumes_router
+from app.api.v1.apply_studio import router as apply_studio_router
+from app.api.v1.workflows import router as workflows_router
 
 settings = get_settings()
 setup_logging()
@@ -198,3 +200,7 @@ app.include_router(events_router)
 app.include_router(webhooks_router)
 app.include_router(role_resumes_router)
 app.include_router(role_resumes_router, prefix="/api")
+app.include_router(apply_studio_router)
+app.include_router(apply_studio_router, prefix="/api")
+app.include_router(workflows_router)
+app.include_router(workflows_router, prefix="/api")

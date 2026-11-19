@@ -164,9 +164,28 @@ class SyncService:
             await contact_repo.update(contact.id, status="Replied", last_replied_at=datetime.now(timezone.utc))
             app_repo = ApplicationRepo(tenant_id)
             app = await app_repo.find_by_contact_id(contact.id)
+            if not app:
+                # Also try matching by thread ID or hr_email
+                from app.models.application import Application
+                app = await Application.find_one(
+                    Application.tenant_id == tenant_id,
+                    {"$or": [
+                        {"gmail_thread_id": matched_thread.id},
+                        {"hr_email": clean_sender.lower()}
+                    ]}
+                )
             if app:
-                await app_repo.append_timeline(app.id, "Replied")
-                await app_repo.update(app.id, status="Replied")
+                await app_repo.append_timeline(app.id, f"Recruiter reply received from {clean_sender}")
+                reply_record = {
+                    "from": clean_sender,
+                    "subject": subject,
+                    "body_snippet": body[:300] if body else "",
+                    "at": datetime.now(timezone.utc).isoformat()
+                }
+                app.recruiter_replies.append(reply_record)
+                app.status = "Response Received"
+                app.updated_at = datetime.now(timezone.utc)
+                await app.save()
 
             # Emit reply.received event
             await publish_event(tenant_id, "reply.received", {

@@ -141,7 +141,11 @@ class TemplateUpdateRequest(CamelModel):
 
 
 # --- Applications ---
-ApplicationStatus = Literal["Saved", "Applied", "Contacted", "Replied", "Interview", "Offer", "Rejected"]
+ApplicationStatus = Literal[
+    "Saved", "Applied", "Contacted", "Replied", "Interview", "Offer", "Rejected",
+    "Draft", "Ready to Apply", "Email Sent", "Email Delivered",
+    "Response Received", "Interview Scheduled", "Assessment", "Offer Received", "Withdrawn"
+]
 
 
 class TimelineEntry(CamelModel):
@@ -153,11 +157,20 @@ class ApplicationResponse(CamelModel):
     id: str
     title: str
     company: str
-    jd: str
-    jd_url: str = Field(alias="jdUrl")
-    contact_id: str = Field(alias="contactId")
-    resume: str
-    status: ApplicationStatus
+    jd: str = ""
+    jd_url: str = Field(default="", alias="jdUrl")
+    contact_id: str = Field(default="", alias="contactId")
+    resume: str = "v1"
+    status: ApplicationStatus = "Saved"
+    hr_email: Optional[str] = Field(default=None, alias="hrEmail")
+    location: Optional[str] = None
+    salary_range: Optional[str] = Field(default=None, alias="salaryRange")
+    match_score: Optional[int] = Field(default=None, alias="matchScore")
+    job_poster_url: Optional[str] = Field(default=None, alias="jobPosterUrl")
+    email_subject: Optional[str] = Field(default=None, alias="emailSubject")
+    email_body: Optional[str] = Field(default=None, alias="emailBody")
+    gmail_thread_id: Optional[str] = Field(default=None, alias="gmailThreadId")
+    created_at: Optional[str] = Field(default=None, alias="createdAt")
     timeline: List[TimelineEntry] = Field(default_factory=list)
 
 

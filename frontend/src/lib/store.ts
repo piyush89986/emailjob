@@ -1,13 +1,61 @@
 import { useSyncExternalStore } from "react";
 import { api, tokens, getApiBaseUrl, setApiBaseUrl } from "@/api/client";
 
-export type Status = "Contacted" | "Replied" | "Interview" | "Offer" | "Rejected";
-export const STATUSES: Status[] = ["Contacted", "Replied", "Interview", "Offer", "Rejected"];
+export type Status =
+  | "Contacted"
+  | "Replied"
+  | "Interview"
+  | "Offer"
+  | "Rejected"
+  | "Draft"
+  | "Ready to Apply"
+  | "Saved"
+  | "Applied"
+  | "Email Sent"
+  | "Email Delivered"
+  | "Response Received"
+  | "Interview Scheduled"
+  | "Assessment"
+  | "Offer Received"
+  | "Withdrawn";
+
+export const STATUSES: Status[] = [
+  "Draft",
+  "Ready to Apply",
+  "Saved",
+  "Applied",
+  "Email Sent",
+  "Response Received",
+  "Interview Scheduled",
+  "Assessment",
+  "Offer Received",
+  "Rejected",
+  "Withdrawn"
+];
 export interface Contact { id: string; name: string; email: string; company: string; status: Status; lastRepliedAt?: string; createdAt: string }
 export interface Msg { id: string; dir: "in" | "out"; from: string; body: string; at: string; kind: "normal" | "auto" | "bounce"; delivery?: "sent" | "failed" | "sending" }
 export interface Thread { id: string; subject: string; contactId: string; unread: boolean; messages: Msg[] }
 export interface Template { id: string; name: string; subject: string; body: string; global: boolean }
-export interface App { id: string; title: string; company: string; jd: string; jdUrl: string; contactId: string; resume: string; status: Status | "Saved" | "Applied"; timeline: { at: string; label: string }[] }
+export interface App {
+  id: string;
+  title: string;
+  company: string;
+  jd: string;
+  jdUrl: string;
+  contactId: string;
+  resume: string;
+  status: Status;
+  hrEmail?: string;
+  location?: string;
+  salaryRange?: string;
+  matchScore?: number;
+  jobPosterUrl?: string;
+  emailSubject?: string;
+  emailBody?: string;
+  gmailThreadId?: string;
+  createdAt?: string;
+  timeline: { at: string; label: string }[];
+}
 export interface Account { id: string; provider: "gmail" | "outlook" | "imap"; address: string; status: "connected" | "error" | "needs_reauth"; isDefault: boolean }
 export interface Exp { id: string; company: string; role: string; period: string; bullets: string[] }
 export interface Profile { name: string; email: string; headline: string; skills: string[]; experience: Exp[]; projects: Exp[]; education: string; links: string }
@@ -31,6 +79,103 @@ export interface RoleResume {
 }
 export interface Draft { to: string; subject: string; body: string }
 
+export interface ExtractedJobDetails {
+  company_name?: string;
+  job_title?: string;
+  location?: string;
+  hr_name?: string;
+  hr_email?: string;
+  contact_number?: string;
+  salary_range?: string;
+  required_skills: string[];
+  required_experience?: string;
+  educational_qualifications?: string;
+  job_responsibilities: string[];
+  candidate_requirements: string[];
+  application_instructions?: string;
+  company_website?: string;
+  confidence_score: number;
+  requires_manual_verification: boolean;
+  raw_text?: string;
+}
+
+export interface JobPoster {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  file_url: string;
+  storage_type: string;
+  extracted_data?: ExtractedJobDetails;
+  generated_jd?: string;
+  selected_resume_id?: string;
+  application_id?: string;
+  status: "uploaded" | "analyzing" | "extracted" | "applied" | "failed";
+  error_message?: string;
+  created_at: string;
+}
+
+export interface ResumeMatchScore {
+  resume_id: string;
+  role_name: string;
+  filename: string;
+  match_percentage: number;
+  breakdown: Record<string, number>;
+  matching_skills: string[];
+  missing_skills: string[];
+  strengths: string[];
+  weaknesses: string[];
+  rationale: string;
+  is_recommended: boolean;
+  attachment_id?: string;
+  url: string;
+}
+
+export interface AutomationWorkflow {
+  id: string;
+  name: string;
+  description: string;
+  is_active: boolean;
+  trigger_type: string;
+  nodes: any[];
+  edges: any[];
+  settings: {
+    min_match_score: number;
+    auto_send: boolean;
+    fallback_to_manual: boolean;
+    delay_between_steps_sec?: number;
+    max_daily_apps?: number;
+    follow_up_days?: number;
+    max_follow_ups?: number;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowExecution {
+  id: string;
+  workflow_id: string;
+  workflow_name: string;
+  job_poster_id?: string;
+  application_id?: string;
+  status: "running" | "completed" | "failed" | "manual_review" | "cancelled";
+  current_node_id?: string;
+  context_data: Record<string, any>;
+  logs: { timestamp: string; node_id?: string; level: string; message: string; data?: any }[];
+  error_message?: string;
+  started_at: string;
+  finished_at?: string;
+}
+
+export interface ApplyMetrics {
+  totalApplications: number;
+  applicationsSent: number;
+  pendingApplications: number;
+  responsesReceived: number;
+  interviewsScheduled: number;
+  rejectedApplications: number;
+}
+
 export interface S {
   user: { name: string; email: string } | null;
   contacts: Contact[];
@@ -44,6 +189,9 @@ export interface S {
   dark: boolean;
   resumes: ResumeVersion[];
   roleResumes: RoleResume[];
+  posters: JobPoster[];
+  workflows: AutomationWorkflow[];
+  applyMetrics: ApplyMetrics | null;
   draft: Draft | null;
 }
 
@@ -56,6 +204,9 @@ const emptyState = (): S => ({
   toasts: [],
   resumes: [],
   roleResumes: [],
+  posters: [],
+  workflows: [],
+  applyMetrics: null,
   contacts: [],
   threads: [],
   templates: [],
@@ -332,6 +483,16 @@ export async function deleteContact(id: string) {
 }
 
 // --- Applications CRUD ---
+export async function fetchApplications() {
+  try {
+    const res = await api.get("/applications");
+    set(() => ({ apps: res.data }));
+    return res.data;
+  } catch (err) {
+    console.warn("Failed fetching applications", err);
+  }
+}
+
 export async function createApplication(data: { title: string; company: string; jdUrl?: string; jd?: string; contactId?: string; resume?: string }) {
   if (isMockMode()) {
     const a: App = { id: uid(), ...data, jd: data.jd || "", jdUrl: data.jdUrl || "", contactId: data.contactId || "", resume: data.resume || "", status: "Saved", timeline: [{ at: new Date().toISOString(), label: "Saved" }] };
@@ -576,5 +737,219 @@ export async function fetchRoleResumes() {
     set(() => ({ roleResumes: res.data }));
   } catch (err) {
     console.warn("Failed fetching role resumes", err);
+  }
+}
+
+// --- Apply Studio Actions ---
+
+export async function fetchApplyMetrics() {
+  try {
+    const res = await api.get("/apply/metrics");
+    set(() => ({ applyMetrics: res.data }));
+    return res.data;
+  } catch (err) {
+    console.warn("Failed fetching apply metrics", err);
+  }
+}
+
+export async function fetchJobPosters() {
+  try {
+    const res = await api.get("/apply/jobs");
+    const posters: JobPoster[] = res.data.items || [];
+    set(() => ({ posters }));
+    return posters;
+  } catch (err) {
+    console.warn("Failed fetching job posters", err);
+  }
+}
+
+export async function uploadJobPoster(file: File, autoAnalyze = false): Promise<JobPoster> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("auto_analyze", autoAnalyze ? "true" : "false");
+
+  try {
+    const res = await api.post("/apply/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
+    const poster: JobPoster = res.data;
+    set((s) => ({ posters: [poster, ...s.posters.filter((p) => p.id !== poster.id)] }));
+    toast(autoAnalyze ? "Job poster uploaded & analyzed!" : "Job poster uploaded!");
+    return poster;
+  } catch (err: any) {
+    const msg = err.response?.data?.detail || err.response?.data?.error?.message || "Upload failed";
+    toast(msg, "err");
+    throw err;
+  }
+}
+
+export async function analyzeJobPoster(id: string): Promise<JobPoster> {
+  try {
+    const res = await api.post(`/apply/jobs/${id}/analyze`);
+    const updated: JobPoster = res.data;
+    set((s) => ({
+      posters: s.posters.map((p) => (p.id === id ? updated : p))
+    }));
+    toast("Job poster analyzed successfully!");
+    return updated;
+  } catch (err: any) {
+    const msg = err.response?.data?.detail || err.response?.data?.error?.message || "Analysis failed";
+    toast(msg, "err");
+    throw err;
+  }
+}
+
+export async function generateJdForPoster(id: string, extractedData?: ExtractedJobDetails) {
+  try {
+    const res = await api.post(`/apply/jobs/${id}/generate-jd`, { extracted_data: extractedData });
+    const jd: string = res.data.generated_jd;
+    set((s) => ({
+      posters: s.posters.map((p) => (p.id === id ? { ...p, generated_jd: jd } : p))
+    }));
+    toast("Job description generated!");
+    return jd;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed generating JD", "err");
+    throw err;
+  }
+}
+
+export async function matchResumesForPoster(id: string, extractedData?: ExtractedJobDetails): Promise<ResumeMatchScore[]> {
+  try {
+    const res = await api.post(`/apply/jobs/${id}/match-resume`, { extracted_data: extractedData });
+    return res.data.matches || [];
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed matching resumes", "err");
+    return [];
+  }
+}
+
+export async function generateEmailForPoster(id: string, params: { extractedData?: ExtractedJobDetails; resumeId?: string; tone?: string }) {
+  try {
+    const res = await api.post(`/apply/jobs/${id}/generate-email`, {
+      extracted_data: params.extractedData,
+      resume_id: params.resumeId,
+      tone: params.tone || "formal"
+    });
+    return res.data;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed generating email", "err");
+    throw err;
+  }
+}
+
+export async function sendPosterApplication(id: string, payload: {
+  toEmail: string;
+  subject: string;
+  bodyHtml: string;
+  resumeId?: string;
+  extractedData?: ExtractedJobDetails;
+  generatedJd?: string;
+}) {
+  try {
+    const res = await api.post(`/apply/jobs/${id}/send`, {
+      to_email: payload.toEmail,
+      subject: payload.subject,
+      body_html: payload.bodyHtml,
+      resume_id: payload.resumeId,
+      extracted_data: payload.extractedData,
+      generated_jd: payload.generatedJd
+    });
+    toast("Application sent via Gmail!");
+    // Refresh apps and metrics
+    fetchApplications();
+    fetchApplyMetrics();
+    return res.data;
+  } catch (err: any) {
+    const msg = err.response?.data?.detail || err.response?.data?.error?.message || "Failed to send application";
+    toast(msg, "err");
+    throw err;
+  }
+}
+
+export async function triggerFollowUp(appId: string, autoSend = false) {
+  try {
+    const res = await api.post(`/applications/${appId}/follow-up?auto_send=${autoSend}`);
+    if (res.data.sent) {
+      toast("Follow-up email sent via Gmail!");
+      fetchApplications();
+    } else {
+      toast("Follow-up draft prepared!");
+    }
+    return res.data;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed to send follow-up", "err");
+    throw err;
+  }
+}
+
+export async function fetchWorkflows(): Promise<AutomationWorkflow[]> {
+  try {
+    const res = await api.get("/workflows");
+    const workflows: AutomationWorkflow[] = res.data || [];
+    set(() => ({ workflows }));
+    return workflows;
+  } catch (err) {
+    console.warn("Failed fetching workflows", err);
+    return [];
+  }
+}
+
+export async function saveWorkflow(wf: Partial<AutomationWorkflow> & { id?: string }): Promise<AutomationWorkflow> {
+  try {
+    let res;
+    if (wf.id) {
+      res = await api.put(`/workflows/${wf.id}`, wf);
+    } else {
+      res = await api.post("/workflows", wf);
+    }
+    const saved: AutomationWorkflow = res.data;
+    set((s) => ({
+      workflows: s.workflows.some((w) => w.id === saved.id)
+        ? s.workflows.map((w) => (w.id === saved.id ? saved : w))
+        : [saved, ...s.workflows]
+    }));
+    toast("Workflow saved successfully!");
+    return saved;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed to save workflow", "err");
+    throw err;
+  }
+}
+
+export async function toggleWorkflowActive(id: string, activate: boolean) {
+  try {
+    const endpoint = activate ? `/workflows/${id}/activate` : `/workflows/${id}/deactivate`;
+    await api.post(endpoint);
+    set((s) => ({
+      workflows: s.workflows.map((w) => (w.id === id ? { ...w, is_active: activate } : w))
+    }));
+    toast(activate ? "Workflow activated!" : "Workflow deactivated!");
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed to update workflow state", "err");
+  }
+}
+
+export async function executeWorkflow(workflowId: string, posterId?: string, isTest = false): Promise<WorkflowExecution> {
+  try {
+    const res = await api.post(`/workflows/${workflowId}/execute`, {
+      job_poster_id: posterId,
+      is_test_run: isTest
+    });
+    const exec: WorkflowExecution = res.data;
+    if (exec.status === "completed") {
+      toast(isTest ? "Test simulation completed successfully!" : "Workflow executed successfully!");
+    } else if (exec.status === "manual_review") {
+      toast("Safety check triggered: Routed to Manual Review Queue", "ok");
+    } else {
+      toast(`Workflow ${exec.status}: ${exec.error_message || ""}`, "err");
+    }
+    fetchApplyMetrics();
+    fetchApplications();
+    return exec;
+  } catch (err: any) {
+    const msg = err.response?.data?.detail || "Workflow execution failed";
+    toast(msg, "err");
+    throw err;
   }
 }

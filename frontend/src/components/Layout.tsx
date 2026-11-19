@@ -1,10 +1,11 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Inbox, PenSquare, FileText, Users, Briefcase, FileBadge, Settings, Moon, Sun, LogOut, AlertTriangle } from "lucide-react";
+import { LayoutDashboard, Inbox, PenSquare, FileText, Users, Briefcase, FileBadge, Settings, Moon, Sun, LogOut, AlertTriangle, Sparkles } from "lucide-react";
 import { logout, toggleDark, useS } from "@/lib/store";
 import { Toaster } from "./ui";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/apply-studio", label: "Apply Studio", icon: Sparkles },
   { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/compose", label: "Compose", icon: PenSquare },
   { to: "/templates", label: "Templates", icon: FileText },
@@ -31,7 +32,7 @@ export default function Layout() {
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white text-sm shadow-sm">
                 J
               </div>
-              <span className="text-lg font-bold tracking-tight">JobMail</span>
+              <span className="text-lg font-bold tracking-tight">BJob</span>
             </div>
 
             {/* Mobile-only action buttons */}

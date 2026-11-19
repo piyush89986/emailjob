@@ -14,6 +14,8 @@ from app.models.resume import ResumeVersion
 from app.models.role_resume import RoleResume
 from app.models.attachment import Attachment
 from app.models.audit_log import AuditLog
+from app.models.job_poster import JobPoster
+from app.models.workflow import AutomationWorkflow, WorkflowExecution
 
 ALL_DOCUMENT_MODELS = [
     Tenant,
@@ -31,6 +33,9 @@ ALL_DOCUMENT_MODELS = [
     RoleResume,
     Attachment,
     AuditLog,
+    JobPoster,
+    AutomationWorkflow,
+    WorkflowExecution,
 ]
 
 __all__ = [
@@ -49,5 +54,8 @@ __all__ = [
     "RoleResume",
     "Attachment",
     "AuditLog",
+    "JobPoster",
+    "AutomationWorkflow",
+    "WorkflowExecution",
     "ALL_DOCUMENT_MODELS",
 ]
