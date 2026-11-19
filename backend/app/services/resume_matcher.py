@@ -12,7 +12,10 @@ import re
 from typing import Any, Dict, List, Optional
 import httpx
 from pydantic import BaseModel, Field
-from pypdf import PdfReader
+try:
+    from pypdf import PdfReader
+except ImportError:
+    PdfReader = None
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -59,6 +62,9 @@ class ResumeMatcher:
     async def extract_resume_text(tenant_id: str, resume: RoleResume) -> str:
         """Extract plain text from resume PDF stored in Cloudinary or local storage."""
         try:
+            if not PdfReader:
+                return f"{resume.role} {resume.filename} {resume.notes or ''}"
+
             # 1. Try local storage first if attachment_id exists
             if resume.attachment_id:
                 att_info = await StorageService.get_attachment_data(tenant_id, resume.attachment_id)

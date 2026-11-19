@@ -9,7 +9,10 @@ import json
 import re
 from typing import Optional, Tuple
 import httpx
-from pypdf import PdfReader
+try:
+    from pypdf import PdfReader
+except ImportError:
+    PdfReader = None
 
 from app.core.config import get_settings
 from app.core.errors import AppError
@@ -61,6 +64,9 @@ class JobPosterAnalyzer:
     @staticmethod
     def _extract_text_from_pdf(pdf_bytes: bytes) -> str:
         """Extract text from PDF pages using pypdf."""
+        if not PdfReader:
+            log.warning("pypdf_not_installed")
+            return ""
         try:
             reader = PdfReader(io.BytesIO(pdf_bytes))
             texts = []
