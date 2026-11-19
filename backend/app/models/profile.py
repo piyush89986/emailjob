@@ -12,6 +12,7 @@ class Profile(Document):
     tenant_id: str
     name: str = ""
     email: str = ""
+    phone: str = ""
     headline: str = ""
     skills: List[str] = Field(default_factory=list)
     experience: List[Dict[str, Any]] = Field(default_factory=list)

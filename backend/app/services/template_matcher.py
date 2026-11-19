@@ -232,11 +232,21 @@ class TemplateMatcher:
         2. If found -> populates template variables.
         3. If not found -> generates personalized application email via AI.
         """
-        # Fetch profile for candidate info
+        # Fetch profile and user for candidate info safely
         profile = await Profile.find_one(Profile.tenant_id == tenant_id)
-        candidate_name = profile.name if profile and profile.name else "Candidate"
-        candidate_email = profile.email if profile and profile.email else ""
-        candidate_phone = profile.phone if profile and profile.phone else ""
+        user = await User.find_one(User.tenant_id == tenant_id)
+
+        candidate_name = (
+            getattr(profile, "name", None)
+            or getattr(user, "full_name", None)
+            or "Candidate"
+        )
+        candidate_email = (
+            getattr(profile, "email", None)
+            or getattr(user, "email", None)
+            or ""
+        )
+        candidate_phone = getattr(profile, "phone", "") or ""
 
         title = job_title or "Open Role"
         company = company_name or "Hiring Team"

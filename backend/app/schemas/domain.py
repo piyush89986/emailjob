@@ -223,6 +223,7 @@ class ExpItem(CamelModel):
 class ProfileResponse(CamelModel):
     name: str
     email: str
+    phone: Optional[str] = ""
     headline: str
     skills: List[str]
     experience: List[ExpItem]
@@ -234,6 +235,7 @@ class ProfileResponse(CamelModel):
 class ProfileUpdateRequest(CamelModel):
     name: Optional[str] = None
     email: Optional[str] = None
+    phone: Optional[str] = None
     headline: Optional[str] = None
     skills: Optional[List[str]] = None
     experience: Optional[List[ExpItem]] = None
