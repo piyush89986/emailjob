@@ -243,7 +243,9 @@ class GmailProvider(EmailProvider):
             "date": headers_map.get("date"),
             "in_reply_to": in_reply_to,
             "references": refs,
-            "kind": kind
+            "kind": kind,
+            "label_ids": data.get("labelIds", []),
+            "headers_map": headers_map
         }
 
     async def register_watch(self, topic_name: str) -> bool:

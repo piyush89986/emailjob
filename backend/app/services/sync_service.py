@@ -199,5 +199,12 @@ class SyncService:
         unread_count = await thread_repo.count(Thread.unread == True)
         await publish_event(tenant_id, "unread.count", {"unreadCount": unread_count})
 
+        # 5. Classify and ingest into dedicated HR Inbox
+        try:
+            from app.services.ai.hr_classifier import HRClassifierService
+            await HRClassifierService.process_inbound_email(account, item, msg)
+        except Exception as ex:
+            log.warning("hr_inbox_classification_error", error=str(ex), msg_id=msg.id)
+
         log.info("inbound_message_ingested", message_id=msg.id, kind=kind, thread_id=matched_thread.id)
         return msg

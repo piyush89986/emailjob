@@ -5,6 +5,7 @@ import Layout from "@/components/Layout";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import Inbox from "@/pages/Inbox";
+import HRInbox from "@/pages/HRInbox";
 import Compose from "@/pages/Compose";
 import Templates from "@/pages/Templates";
 import Contacts from "@/pages/Contacts";
@@ -50,7 +51,7 @@ function App() {
       <Routes>
         <Route path="/login" element={<Auth mode="login" />} /><Route path="/signup" element={<Auth mode="signup" />} />
         <Route element={<Protected><Layout /></Protected>}>
-          <Route path="/" element={<Dashboard />} /><Route path="/apply-studio" element={<ApplyStudio />} /><Route path="/inbox" element={<Inbox />} /><Route path="/compose" element={<Compose />} />
+          <Route path="/" element={<Dashboard />} /><Route path="/apply-studio" element={<ApplyStudio />} /><Route path="/hr-inbox" element={<HRInbox />} /><Route path="/inbox" element={<Inbox />} /><Route path="/compose" element={<Compose />} />
           <Route path="/templates" element={<Templates />} /><Route path="/contacts" element={<Contacts />} /><Route path="/applications" element={<Applications />} />
           <Route path="/resume" element={<ResumeBuilder />} /><Route path="/settings" element={<Settings />} />
         </Route>

@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard,
   Inbox,
+  MailCheck,
   PenSquare,
   FileText,
   Users,
@@ -23,17 +24,19 @@ import { Toaster } from "./ui";
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/apply-studio", label: "Apply Studio", icon: Sparkles },
+  { to: "/hr-inbox", label: "HR Inbox", icon: MailCheck },
   { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/compose", label: "Compose", icon: PenSquare },
   { to: "/templates", label: "Templates", icon: FileText },
   { to: "/contacts", label: "Contacts", icon: Users },
   { to: "/applications", label: "Applications", icon: Briefcase },
-  { to: "/resume", label: "Resume Builder", icon: FileBadge },
+  { to: "/resume", label: "Resume", icon: FileBadge },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export default function Layout() {
   const unread = useS((s) => s.threads.filter((t) => t.unread).length);
+  const hrUnread = useS((s) => s.hrUnreadCount);
   const dark = useS((s) => s.dark);
   const user = useS((s) => s.user);
   const reauth = useS((s) => s.accounts.some((a) => a.status !== "connected"));
@@ -124,6 +127,15 @@ export default function Layout() {
                 >
                   <Icon size={18} className="shrink-0" />
                   {!collapsed && <span className="truncate">{label}</span>}
+                  {label === "HR Inbox" && hrUnread > 0 && (
+                    collapsed ? (
+                      <span className="hidden md:block absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
+                    ) : (
+                      <span className="ml-auto rounded-full bg-emerald-600 px-1.5 py-0.2 text-xs font-semibold text-white">
+                        {hrUnread}
+                      </span>
+                    )
+                  )}
                   {label === "Inbox" && unread > 0 && (
                     collapsed ? (
                       <span className="hidden md:block absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-indigo-600 ring-2 ring-white dark:ring-slate-900" />

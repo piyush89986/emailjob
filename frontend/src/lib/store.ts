@@ -177,6 +177,50 @@ export interface ApplyMetrics {
   rejectedApplications: number;
 }
 
+export interface HRInboxItem {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  gmail_message_id: string;
+  gmail_thread_id?: string;
+  email_account_id?: string;
+  sender_name: string;
+  sender_email: string;
+  to_email: string;
+  subject: string;
+  body_preview: string;
+  body_html: string;
+  received_at: string;
+  category: string;
+  confidence_score: number;
+  is_relevant: boolean;
+  needs_manual_review: boolean;
+  classification_reasoning?: string;
+  company?: string;
+  job_title?: string;
+  application_id?: string;
+  is_read: boolean;
+  is_archived: boolean;
+  labels?: string[];
+  application?: {
+    id: string;
+    title: string;
+    company: string;
+    status: string;
+    created_at: string;
+  };
+}
+
+export interface HRCounts {
+  all: number;
+  hr: number;
+  interviews: number;
+  applications: number;
+  rejections: number;
+  unread: number;
+  review: number;
+}
+
 export interface S {
   user: { name: string; email: string } | null;
   contacts: Contact[];
@@ -194,6 +238,9 @@ export interface S {
   workflows: AutomationWorkflow[];
   applyMetrics: ApplyMetrics | null;
   draft: Draft | null;
+  hrInbox: HRInboxItem[];
+  hrCounts: HRCounts;
+  hrUnreadCount: number;
 }
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
@@ -224,6 +271,9 @@ const emptyState = (): S => ({
   templates: [],
   apps: [],
   accounts: [],
+  hrInbox: [],
+  hrCounts: { all: 0, hr: 0, interviews: 0, applications: 0, rejections: 0, unread: 0, review: 0 },
+  hrUnreadCount: 0,
   profile: {
     name: "",
     email: "",
@@ -313,7 +363,7 @@ export function logout() {
 export async function loadInitialData() {
   if (isMockMode() || !tokens.access) return;
   try {
-    const [meRes, contactsRes, threadsRes, tplsRes, appsRes, accsRes, profRes, settingsRes, resumesRes, roleResumesRes] = await Promise.allSettled([
+    const [meRes, contactsRes, threadsRes, tplsRes, appsRes, accsRes, profRes, settingsRes, resumesRes, roleResumesRes, hrInboxRes] = await Promise.allSettled([
       api.get("/auth/me"),
       api.get("/contacts"),
       api.get("/threads"),
@@ -324,6 +374,7 @@ export async function loadInitialData() {
       api.get("/settings"),
       api.get("/ai/resumes"),
       api.get("/role-resumes"),
+      api.get("/hr-inbox"),
     ]);
 
     // Check if auth failed
@@ -343,6 +394,8 @@ export async function loadInitialData() {
       localStorage.setItem("jobmail_user", JSON.stringify(resolvedUser));
     }
 
+    const hrData = hrInboxRes.status === "fulfilled" ? hrInboxRes.value.data : null;
+
     set((s) => ({
       user: resolvedUser || s.user,
       contacts: contactsRes.status === "fulfilled" ? contactsRes.value.data : s.contacts,
@@ -354,6 +407,9 @@ export async function loadInitialData() {
       prefs: settingsRes.status === "fulfilled" ? settingsRes.value.data : s.prefs,
       resumes: resumesRes.status === "fulfilled" ? resumesRes.value.data : s.resumes,
       roleResumes: roleResumesRes.status === "fulfilled" ? roleResumesRes.value.data : s.roleResumes,
+      hrInbox: hrData ? hrData.items : s.hrInbox,
+      hrCounts: hrData ? hrData.counts : s.hrCounts,
+      hrUnreadCount: hrData?.counts?.unread ?? s.hrUnreadCount,
     }));
 
     setupSSE();
@@ -375,6 +431,26 @@ function setupSSE() {
         toast(`New reply from ${payload.contactName || payload.from}`);
         loadInitialData();
       } catch {}
+    });
+
+    sseSource.addEventListener("hr_inbox.new", (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        const cat = String(payload.category || "").replace(/_/g, " ");
+        toast(`📨 New HR Email: ${payload.sender} (${cat})`);
+        fetchHRInbox();
+      } catch {}
+    });
+
+    sseSource.addEventListener("hr_inbox.unread_count", (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        set(() => ({ hrUnreadCount: payload.count }));
+      } catch {}
+    });
+
+    sseSource.addEventListener("hr_inbox.updated", () => {
+      fetchHRInbox();
     });
 
     sseSource.addEventListener("account.needs_reauth", (e) => {
@@ -698,6 +774,75 @@ export async function deleteMailbox(accountId: string) {
     } catch {}
   } else {
     toast("Mailbox disconnected");
+  }
+}
+
+// --- Dedicated HR Inbox Actions ---
+export async function fetchHRInbox(filter = "all", q?: string, page = 1) {
+  if (isMockMode()) return null;
+  try {
+    const params: any = { filter, page };
+    if (q && q.trim()) params.q = q.trim();
+    const res = await api.get("/hr-inbox", { params });
+    set(() => ({
+      hrInbox: res.data.items || [],
+      hrCounts: res.data.counts || { all: 0, hr: 0, interviews: 0, applications: 0, rejections: 0, unread: 0, review: 0 },
+      hrUnreadCount: res.data.counts?.unread || 0,
+    }));
+    return res.data;
+  } catch (err) {
+    console.warn("fetchHRInbox failed", err);
+    return null;
+  }
+}
+
+export async function markHREmailRead(emailId: string, isRead: boolean) {
+  set((s) => ({
+    hrInbox: s.hrInbox.map((item) => (item.id === emailId ? { ...item, is_read: isRead } : item)),
+    hrUnreadCount: Math.max(0, s.hrUnreadCount + (isRead ? -1 : 1)),
+  }));
+  if (!isMockMode()) {
+    try {
+      await api.patch(`/hr-inbox/${emailId}/read`, { is_read: isRead });
+    } catch (err) {
+      console.warn("markHREmailRead failed", err);
+    }
+  }
+}
+
+export async function reclassifyHREmail(emailId: string, category: string, isRelevant?: boolean) {
+  try {
+    const res = await api.patch(`/hr-inbox/${emailId}/reclassify`, { category, is_relevant: isRelevant });
+    toast("Email classification updated!");
+    await fetchHRInbox();
+    return res.data;
+  } catch (err: any) {
+    toast(err?.response?.data?.detail || "Failed to update classification", "err");
+    throw err;
+  }
+}
+
+export async function replyHREmail(emailId: string, bodyHtml: string, subject?: string) {
+  try {
+    const res = await api.post(`/hr-inbox/${emailId}/reply`, { body_html: bodyHtml, subject });
+    toast("Reply sent via Gmail!");
+    return res.data;
+  } catch (err: any) {
+    toast(err?.response?.data?.detail || "Failed to send reply", "err");
+    throw err;
+  }
+}
+
+export async function syncHRInbox() {
+  toast("Syncing HR emails from Gmail...");
+  try {
+    const res = await api.post("/hr-inbox/sync");
+    toast(`Sync finished: ${res.data.synced_new} new, ${res.data.backfilled} processed`);
+    await fetchHRInbox();
+    return res.data;
+  } catch (err: any) {
+    toast(err?.response?.data?.detail || "Gmail sync failed", "err");
+    throw err;
   }
 }
 

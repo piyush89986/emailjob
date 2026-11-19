@@ -16,6 +16,7 @@ from app.models.attachment import Attachment
 from app.models.audit_log import AuditLog
 from app.models.job_poster import JobPoster
 from app.models.workflow import AutomationWorkflow, WorkflowExecution
+from app.models.hr_inbox import HRInbox
 
 ALL_DOCUMENT_MODELS = [
     Tenant,
@@ -36,6 +37,7 @@ ALL_DOCUMENT_MODELS = [
     JobPoster,
     AutomationWorkflow,
     WorkflowExecution,
+    HRInbox,
 ]
 
 __all__ = [
@@ -57,5 +59,6 @@ __all__ = [
     "JobPoster",
     "AutomationWorkflow",
     "WorkflowExecution",
+    "HRInbox",
     "ALL_DOCUMENT_MODELS",
 ]
