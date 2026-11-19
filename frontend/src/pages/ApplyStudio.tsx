@@ -47,7 +47,9 @@ import {
   Plus,
   LayoutGrid,
   Sliders,
-  Maximize2
+  Maximize2,
+  Pencil,
+  Check
 } from "lucide-react";
 
 import {
@@ -77,96 +79,150 @@ import {
 
 import { Badge, Page, fmt } from "@/components/ui";
 
-// --- Custom React Flow Node Components ---
+// --- Custom React Flow Node Components (Refined Sleek Node Cards) ---
 
 function CustomWorkflowNode({ data, id, selected }: { data: any; id: string; selected?: boolean }) {
   const isTrigger = data.category === "trigger";
-  const isAi = data.category === "ai";
-  const isResume = data.category === "resume";
   const isCondition = data.category === "condition";
   const isEmail = data.category === "email";
+  const isResume = data.category === "resume";
   const isTracking = data.category === "tracking";
 
-  let headerColor = "bg-indigo-600 text-white";
-  let borderColor = selected ? "border-indigo-500 ring-2 ring-indigo-400" : "border-indigo-200 dark:border-indigo-800";
-  let icon = <Sparkles size={16} className="shrink-0" />;
-  let badgeLabel = "AI Action";
+  // Category visual accent & icon
+  let stripeColor = "bg-indigo-500";
+  let iconBoxBg = "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400";
+  let icon = <Sparkles size={16} />;
+  let categoryLabel = "AI Action";
 
   if (isTrigger) {
-    headerColor = "bg-emerald-600 text-white";
-    borderColor = selected ? "border-emerald-500 ring-2 ring-emerald-400" : "border-emerald-200 dark:border-emerald-800";
-    icon = <Upload size={16} className="shrink-0" />;
-    badgeLabel = "Trigger";
+    stripeColor = "bg-emerald-500";
+    iconBoxBg = "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400";
+    icon = <Upload size={16} />;
+    categoryLabel = "Trigger";
   } else if (isCondition) {
-    headerColor = "bg-amber-600 text-white";
-    borderColor = selected ? "border-amber-500 ring-2 ring-amber-400" : "border-amber-200 dark:border-amber-800";
-    icon = <ShieldCheck size={16} className="shrink-0" />;
-    badgeLabel = "Condition";
+    stripeColor = "bg-amber-500";
+    iconBoxBg = "bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400";
+    icon = <ShieldCheck size={16} />;
+    categoryLabel = "Condition";
   } else if (isEmail) {
-    headerColor = "bg-sky-600 text-white";
-    borderColor = selected ? "border-sky-500 ring-2 ring-sky-400" : "border-sky-200 dark:border-sky-800";
-    icon = <Mail size={16} className="shrink-0" />;
-    badgeLabel = "Email";
+    stripeColor = "bg-sky-500";
+    iconBoxBg = "bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400";
+    icon = <Mail size={16} />;
+    categoryLabel = "Email";
   } else if (isResume) {
-    headerColor = "bg-purple-600 text-white";
-    borderColor = selected ? "border-purple-500 ring-2 ring-purple-400" : "border-purple-200 dark:border-purple-800";
-    icon = <FileCheck size={16} className="shrink-0" />;
-    badgeLabel = "Resume Match";
+    stripeColor = "bg-purple-500";
+    iconBoxBg = "bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400";
+    icon = <FileCheck size={16} />;
+    categoryLabel = "Matching";
   } else if (isTracking) {
-    headerColor = "bg-rose-600 text-white";
-    borderColor = selected ? "border-rose-500 ring-2 ring-rose-400" : "border-rose-200 dark:border-rose-800";
-    icon = <CheckCircle2 size={16} className="shrink-0" />;
-    badgeLabel = "Tracking";
+    stripeColor = "bg-rose-500";
+    iconBoxBg = "bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400";
+    icon = <CheckCircle2 size={16} />;
+    categoryLabel = "Tracking";
   }
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.dispatchEvent(new CustomEvent("flow-node-delete", { detail: { id } }));
+  };
+
+  const handleSelect = () => {
+    window.dispatchEvent(new CustomEvent("flow-node-select", { detail: { id } }));
+  };
 
   return (
     <div
-      className={`w-72 rounded-2xl border-2 ${borderColor} bg-white shadow-lg dark:bg-slate-900 overflow-hidden text-xs transition-all hover:shadow-xl`}
+      onClick={handleSelect}
+      className={`w-72 sm:w-80 rounded-2xl border ${
+        selected
+          ? "border-sky-500 ring-2 ring-sky-400 shadow-xl"
+          : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-lg"
+      } bg-white dark:bg-slate-900 overflow-hidden text-xs transition-all hover:shadow-xl cursor-pointer group select-none`}
     >
+      {/* Target input handle */}
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-3.5 !h-3.5 !bg-indigo-600 !border-2 !border-white dark:!border-slate-900 shadow-md transition-transform hover:scale-125"
+        className="!w-4 !h-4 !bg-sky-500 !border-2 !border-white dark:!border-slate-900 shadow-md transition-transform hover:scale-125 !-left-2"
       />
-      <div className={`px-3.5 py-2.5 flex items-center justify-between font-semibold ${headerColor}`}>
-        <div className="flex items-center gap-2 truncate">
-          {icon}
-          <span className="truncate text-xs font-bold">{data.label || "Step"}</span>
+
+      {/* Top Accent Stripe */}
+      <div className={`h-1.5 w-full ${stripeColor}`} />
+
+      {/* Card Header */}
+      <div className="px-4 py-3 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80">
+        <div className="flex items-center gap-2.5 truncate">
+          <div className={`p-1.5 rounded-lg ${iconBoxBg} shrink-0`}>
+            {icon}
+          </div>
+          <div className="truncate">
+            <h4 className="font-bold text-xs text-slate-900 dark:text-white truncate">
+              {data.label || "Step"}
+            </h4>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+              {categoryLabel}
+            </span>
+          </div>
         </div>
-        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-black/20 text-white shrink-0">
-          {badgeLabel}
-        </span>
+
+        {/* Delete step button right on node */}
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors shrink-0"
+          title="Delete step from sequence"
+        >
+          <Trash2 size={14} />
+        </button>
       </div>
-      <div className="p-3.5 space-y-2 text-slate-600 dark:text-slate-300">
-        <p className="text-xs leading-snug line-clamp-2">
-          {data.description || "Processes workflow step payload and passes to next node."}
+
+      {/* Card Body */}
+      <div className="p-4 space-y-2.5 text-slate-600 dark:text-slate-300">
+        <p className="text-[11px] leading-relaxed line-clamp-2 text-slate-500 dark:text-slate-400">
+          {data.description || "Processes workflow payload and passes to next step."}
         </p>
 
         {data.threshold !== undefined && (
-          <div className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-300">
-            <span>Score Threshold</span>
-            <span className="font-bold">{data.threshold}%</span>
+          <div className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 px-2.5 py-1 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+            <span>Pass Threshold</span>
+            <span className="font-bold font-mono">≥ {data.threshold}%</span>
           </div>
         )}
 
         {data.tone && (
-          <div className="flex items-center justify-between rounded-lg bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/50 px-2 py-1 text-xs font-medium text-sky-800 dark:text-sky-300">
+          <div className="flex items-center justify-between rounded-lg bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60 px-2.5 py-1 text-[11px] font-medium text-sky-800 dark:text-sky-300">
             <span>Tone</span>
-            <span className="font-bold uppercase">{data.tone}</span>
+            <span className="font-bold uppercase tracking-wider">{data.tone}</span>
           </div>
         )}
 
-        <div className="pt-1.5 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-800">
-          <span className="font-mono text-[10px]">ID: {id}</span>
-          <span className="text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-1">
-            <Sliders size={11} /> Configured
-          </span>
+        {/* Card Footer inside node */}
+        <div className="pt-2 flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-100 dark:border-slate-800/80">
+          {isCondition ? (
+            <>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                ✓ SUCCESS
+              </span>
+              <span className="font-bold text-rose-500 dark:text-rose-400">
+                ✗ FAILURE
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="font-mono text-slate-400">ID: {id}</span>
+              <span className="text-indigo-600 dark:text-indigo-400 font-semibold group-hover:underline">
+                Configure →
+              </span>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Source output handle */}
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-3.5 !h-3.5 !bg-indigo-600 !border-2 !border-white dark:!border-slate-900 shadow-md transition-transform hover:scale-125"
+        className="!w-4 !h-4 !bg-sky-500 !border-2 !border-white dark:!border-slate-900 shadow-md transition-transform hover:scale-125 !-right-2"
       />
     </div>
   );
@@ -182,6 +238,105 @@ const nodeTypes = {
   sendGmail: CustomWorkflowNode,
   saveApplication: CustomWorkflowNode
 };
+
+// Preset catalog for the Add Step slide-over drawer
+const WORKFLOW_STEP_PRESETS = [
+  {
+    id: "ai-vision",
+    label: "AI Vision Extraction",
+    category: "ai",
+    type: "analyzeJob",
+    categoryBadge: "AI Engine",
+    icon: <Sparkles size={18} />,
+    iconBg: "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400",
+    description: "Extracts Company, Job Title, Skills, and Recruiter HR Email with OCR vision.",
+    extra: {
+      description: "Extracts Company, Job Title, Skills & Recruiter HR Email with OCR vision.",
+      model: "gpt-4o-mini",
+    },
+  },
+  {
+    id: "generate-jd",
+    label: "Generate Job Description",
+    category: "ai",
+    type: "generateJd",
+    categoryBadge: "AI Engine",
+    icon: <FileText size={18} />,
+    iconBg: "bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400",
+    description: "Builds a structured, complete Markdown Job Description from messy posters.",
+    extra: {
+      description: "Builds a structured, complete Markdown Job Description from messy posters.",
+    },
+  },
+  {
+    id: "match-resume",
+    label: "Match Best Resume",
+    category: "resume",
+    type: "matchResume",
+    categoryBadge: "Scoring Engine",
+    icon: <FileCheck size={18} />,
+    iconBg: "bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400",
+    description: "Calculates 5-factor weighted fit score against all stored role resumes.",
+    extra: {
+      description: "Calculates 5-factor weighted fit score against all stored role resumes.",
+    },
+  },
+  {
+    id: "condition-gate",
+    label: "Safety Gate Check",
+    category: "condition",
+    type: "condition",
+    categoryBadge: "Logic / Filter",
+    icon: <ShieldCheck size={18} />,
+    iconBg: "bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400",
+    description: "Branches execution: routes low-scoring applications to manual review.",
+    extra: {
+      description: "Branch based on match score threshold & verified HR email.",
+      threshold: 75,
+    },
+  },
+  {
+    id: "ai-email",
+    label: "AI Email Drafter",
+    category: "email",
+    type: "generateEmail",
+    categoryBadge: "AI Generator",
+    icon: <Mail size={18} />,
+    iconBg: "bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400",
+    description: "Crafts a high-converting, personalized cold application email.",
+    extra: {
+      description: "Crafts a personalized application email tailored to recruiter requirements.",
+      tone: "formal",
+      subjectTemplate: "Application for {{jobTitle}} – {{candidateName}}",
+    },
+  },
+  {
+    id: "send-gmail",
+    label: "Send via Gmail",
+    category: "email",
+    type: "sendGmail",
+    categoryBadge: "Integration",
+    icon: <Send size={18} />,
+    iconBg: "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400",
+    description: "Dispatches the email with tailored resume attachment via your connected Gmail.",
+    extra: {
+      description: "Dispatches email with tailored resume PDF MIME attachment via Gmail API.",
+    },
+  },
+  {
+    id: "track-app",
+    label: "Track Application",
+    category: "tracking",
+    type: "saveApplication",
+    categoryBadge: "Lifecycle",
+    icon: <CheckCircle2 size={18} />,
+    iconBg: "bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400",
+    description: "Logs into SaaS Application Tracker and starts real-time reply monitoring.",
+    extra: {
+      description: "Logs application into pipeline tracker and monitors incoming replies.",
+    },
+  },
+];
 
 export default function ApplyStudio() {
   const [activeTab, setActiveTab] = useState<"hub" | "builder" | "history">("hub");
@@ -238,18 +393,38 @@ export default function ApplyStudio() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] = useState<AutomationWorkflow | null>(null);
   const [executionLogs, setExecutionLogs] = useState<WorkflowExecution | null>(null);
-  const [panelTab, setPanelTab] = useState<"add" | "edit" | "settings">("add");
 
+  // Slide-over Drawers state & Edit form state (Reference UI pattern)
+  const [drawerMode, setDrawerMode] = useState<"none" | "add" | "edit">("none");
+  const [isRenamingWorkflow, setIsRenamingWorkflow] = useState(false);
+  const [workflowNameInput, setWorkflowNameInput] = useState("");
+  const [editFormData, setEditFormData] = useState<{
+    label: string;
+    description: string;
+    threshold?: number;
+    tone?: string;
+    subjectTemplate?: string;
+    model?: string;
+  }>({
+    label: "",
+    description: "",
+    threshold: 75,
+    tone: "formal",
+    subjectTemplate: "Application for {{jobTitle}} – {{candidateName}}",
+    model: "gpt-4o-mini",
+  });
+
+  // High-visibility electric cyan edge wires
   const edgeOptions = {
     type: "smoothstep",
     animated: true,
     style: {
-      stroke: "#6366f1",
+      stroke: "#0ea5e9", // Bright Electric Sky Blue - vibrant & visible on dark and light!
       strokeWidth: 3.5,
     },
     markerEnd: {
       type: MarkerType.ArrowClosed,
-      color: "#6366f1",
+      color: "#0ea5e9",
       width: 22,
       height: 22,
     },
@@ -263,8 +438,8 @@ export default function ApplyStudio() {
             ...connection,
             type: "smoothstep",
             animated: true,
-            style: { stroke: "#6366f1", strokeWidth: 3.5 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#6366f1", width: 22, height: 22 },
+            style: { stroke: "#0ea5e9", strokeWidth: 3.5 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#0ea5e9", width: 22, height: 22 },
           },
           eds
         )
@@ -272,38 +447,93 @@ export default function ApplyStudio() {
     [setEdges]
   );
 
-  // Auto layout into clean organized 4x2 grid
-  const handleTidyLayout = () => {
-    const nodeWidth = 320;
-    const nodeHeight = 180;
-    const gapX = 80;
-    const gapY = 120;
-    const cols = 4;
+  // Load initial workflows and metrics
+  useEffect(() => {
+    fetchWorkflows();
+    fetchApplyMetrics();
+    fetchJobPosters();
+  }, []);
 
-    setNodes((current) =>
-      current.map((n, i) => {
-        const row = Math.floor(i / cols);
-        const colInRow = i % cols;
-        const col = row % 2 === 0 ? colInRow : cols - 1 - colInRow;
-        return {
-          ...n,
-          position: {
-            x: 60 + col * (nodeWidth + gapX),
-            y: 60 + row * (nodeHeight + gapY),
-          },
-        };
+  // Sync loaded workflow into canvas nodes and edges
+  useEffect(() => {
+    if (workflows && workflows.length > 0 && !selectedWorkflow) {
+      const wf = workflows[0];
+      setSelectedWorkflow(wf);
+      setWorkflowNameInput(wf.name || "Automatic Job Application Pipeline");
+      if (wf.nodes && wf.nodes.length > 0) {
+        setNodes(wf.nodes);
+      }
+      if (wf.edges && wf.edges.length > 0) {
+        const mappedEdges = wf.edges.map((e: any) => ({
+          ...e,
+          type: "smoothstep",
+          animated: true,
+          style: { stroke: "#0ea5e9", strokeWidth: 3.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#0ea5e9", width: 22, height: 22 },
+        }));
+        setEdges(mappedEdges);
+      }
+    }
+  }, [workflows, selectedWorkflow, setNodes, setEdges]);
+
+  // Delete node from canvas
+  const handleDeleteNode = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+      setSelectedNode((curr) => (curr?.id === nodeId ? null : curr));
+      toast("Node removed from workflow sequence");
+    },
+    [setNodes, setEdges]
+  );
+
+  // Open Edit drawer for a clicked node
+  const handleOpenEditDrawer = useCallback((node: Node) => {
+    setSelectedNode(node);
+    setEditFormData({
+      label: String(node.data?.label || "Workflow Step"),
+      description: String(node.data?.description || ""),
+      threshold: typeof node.data?.threshold === "number" ? node.data.threshold : 75,
+      tone: String(node.data?.tone || "formal"),
+      subjectTemplate: String(node.data?.subjectTemplate || "Application for {{jobTitle}} – {{candidateName}}"),
+      model: String(node.data?.model || "gpt-4o-mini"),
+    });
+    setDrawerMode("edit");
+  }, []);
+
+  // Commit node edits from slide-over drawer
+  const handleUpdateNodeFromDrawer = () => {
+    if (!selectedNode) return;
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === selectedNode.id) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              label: editFormData.label,
+              description: editFormData.description,
+              ...(editFormData.threshold !== undefined ? { threshold: editFormData.threshold } : {}),
+              ...(editFormData.tone ? { tone: editFormData.tone } : {}),
+              ...(editFormData.subjectTemplate ? { subjectTemplate: editFormData.subjectTemplate } : {}),
+              ...(editFormData.model ? { model: editFormData.model } : {}),
+            },
+          };
+        }
+        return n;
       })
     );
-    toast("Pipeline organized into clean layout!");
+    setDrawerMode("none");
+    toast("Node settings updated!");
   };
 
-  // Add node from library
-  const handleAddNode = (category: string, label: string, type: string, extraData: any = {}) => {
+  // Add step from "Add workflow step" slide-over drawer
+  const handleAddNodeFromDrawer = (category: string, label: string, type: string, extraData: any = {}) => {
     const newId = `node-${Date.now()}`;
     const lastNode = nodes.length > 0 ? nodes[nodes.length - 1] : null;
     const newPos = lastNode
       ? { x: lastNode.position.x + 360, y: lastNode.position.y }
-      : { x: 60, y: 60 };
+      : { x: 80, y: 80 };
 
     const newNode: Node = {
       id: newId,
@@ -320,33 +550,67 @@ export default function ApplyStudio() {
     setNodes((nds) => [...nds, newNode]);
 
     const sourceId = selectedNode ? selectedNode.id : (lastNode ? lastNode.id : null);
-    if (sourceId) {
+    if (sourceId && sourceId !== newId) {
       const newEdge: Edge = {
         id: `e-${sourceId}-${newId}`,
         source: sourceId,
         target: newId,
         type: "smoothstep",
         animated: true,
-        style: { stroke: "#6366f1", strokeWidth: 3.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#6366f1", width: 22, height: 22 },
+        style: { stroke: "#0ea5e9", strokeWidth: 3.5 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#0ea5e9", width: 22, height: 22 },
       };
       setEdges((eds) => [...eds, newEdge]);
     }
 
-    setSelectedNode(newNode);
-    setPanelTab("edit");
-    toast(`Added "${label}" to workflow!`);
+    setDrawerMode("none");
+    toast(`Added "${label}" to workflow sequence!`);
   };
 
-  // Delete node
-  const handleDeleteNode = (nodeId: string) => {
-    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
-    if (selectedNode?.id === nodeId) {
-      setSelectedNode(null);
-      setPanelTab("add");
-    }
-    toast("Node removed from workflow");
+  // Listen for delete & select events emitted by node cards
+  useEffect(() => {
+    const onDelete = (e: any) => {
+      if (e.detail?.id) {
+        handleDeleteNode(e.detail.id);
+      }
+    };
+    const onSelect = (e: any) => {
+      if (e.detail?.id) {
+        const found = nodes.find((n) => n.id === e.detail.id);
+        if (found) {
+          handleOpenEditDrawer(found);
+        }
+      }
+    };
+    window.addEventListener("flow-node-delete", onDelete);
+    window.addEventListener("flow-node-select", onSelect);
+    return () => {
+      window.removeEventListener("flow-node-delete", onDelete);
+      window.removeEventListener("flow-node-select", onSelect);
+    };
+  }, [nodes, handleDeleteNode, handleOpenEditDrawer]);
+
+  // Auto layout into clean organized 2-row snake layout
+  const handleTidyLayout = () => {
+    const nodeWidth = 320;
+    const gapX = 80;
+    const cols = 4;
+
+    setNodes((current) =>
+      current.map((n, i) => {
+        const row = Math.floor(i / cols);
+        const colInRow = i % cols;
+        const col = row % 2 === 0 ? colInRow : cols - 1 - colInRow;
+        return {
+          ...n,
+          position: {
+            x: 80 + col * (nodeWidth + gapX),
+            y: 80 + row * 280,
+          },
+        };
+      })
+    );
+    toast("Pipeline organized into clean 2-row layout!");
   };
 
   // Handle Drag & Drop
@@ -739,53 +1003,94 @@ export default function ApplyStudio() {
 
       {/* --- TAB 2: VISUAL WORKFLOW BUILDER --- */}
       {activeTab === "builder" && (
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 overflow-hidden h-[820px] flex flex-col">
-          {/* Builder Header Toolbar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-            <div className="flex items-center gap-3">
-              <span className="font-bold text-sm flex items-center gap-2">
-                <Zap size={18} className="text-indigo-600" />
-                {selectedWorkflow?.name || "Automatic Job Application Pipeline"}
-              </span>
-              <Badge v={selectedWorkflow?.is_active ? "connected" : "waiting"} />
-              <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
-                {nodes.length} Nodes • {edges.length} Wires
-              </span>
+        <div className="space-y-4">
+          {/* Canvas Top Action Header (Reference UI pattern) */}
+          <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            {/* Left: Pipeline Title & Inline Edit & Status */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-3">
+                {isRenamingWorkflow ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="input text-sm font-bold py-1 px-2.5 max-w-xs"
+                      value={workflowNameInput}
+                      onChange={(e) => setWorkflowNameInput(e.target.value)}
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => {
+                        if (selectedWorkflow) {
+                          setSelectedWorkflow({ ...selectedWorkflow, name: workflowNameInput });
+                        }
+                        setIsRenamingWorkflow(false);
+                      }}
+                      className="btn btn-primary text-xs py-1 px-2.5 flex items-center gap-1"
+                    >
+                      <Check size={12} /> Save
+                    </button>
+                    <button
+                      onClick={() => setIsRenamingWorkflow(false)}
+                      className="btn text-xs py-1 px-2"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2.5">
+                    <h2 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                      <Zap size={18} className="text-indigo-600 dark:text-indigo-400" />
+                      {selectedWorkflow?.name || "Automatic Job Application Pipeline"}
+                    </h2>
+                    <button
+                      onClick={() => {
+                        setWorkflowNameInput(selectedWorkflow?.name || "Automatic Job Application Pipeline");
+                        setIsRenamingWorkflow(true);
+                      }}
+                      className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1"
+                      title="Rename workflow"
+                    >
+                      <Pencil size={11} /> Edit
+                    </button>
+                  </div>
+                )}
+
+                {/* Status Badge */}
+                <span
+                  className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
+                    selectedWorkflow?.is_active
+                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                      : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      selectedWorkflow?.is_active ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                    }`}
+                  />
+                  {selectedWorkflow?.is_active ? "ACTIVE" : "DRAFT"}
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium hidden lg:inline">
+                  {nodes.length} Steps • {edges.length} Connections
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Campaign Flow — Define the steps, AI filters, and conditions for your outreach sequence.
+              </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            {/* Right: Action Buttons (Add Node, Save Sequence, Auto Tidy, Test Run, Start Campaign) */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* + Add Node Button */}
               <button
-                onClick={handleTidyLayout}
-                className="btn text-xs py-1.5 px-3 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-                title="Automatically organize nodes into clean 2-row layout"
+                onClick={() => setDrawerMode("add")}
+                className="btn text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all shadow-xs"
               >
-                <LayoutGrid size={13} className="text-indigo-500" /> Auto Tidy Grid
+                <Plus size={15} />
+                <span>Add Node</span>
               </button>
-              <button
-                onClick={() => {
-                  if (selectedWorkflow) {
-                    toggleWorkflowActive(selectedWorkflow.id, !selectedWorkflow.is_active);
-                  }
-                }}
-                className={`btn text-xs py-1.5 px-3 font-semibold ${
-                  selectedWorkflow?.is_active
-                    ? "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950 dark:text-rose-400"
-                    : "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-400"
-                }`}
-              >
-                {selectedWorkflow?.is_active ? "Deactivate" : "Activate"}
-              </button>
-              <button
-                onClick={async () => {
-                  if (selectedWorkflow) {
-                    const exec = await executeWorkflow(selectedWorkflow.id, undefined, true);
-                    setExecutionLogs(exec);
-                  }
-                }}
-                className="btn text-xs py-1.5 px-3 flex items-center gap-1.5"
-              >
-                <Play size={13} /> Test Run
-              </button>
+
+              {/* Save Sequence Button */}
               <button
                 onClick={() => {
                   if (selectedWorkflow) {
@@ -794,418 +1099,438 @@ export default function ApplyStudio() {
                       name: selectedWorkflow.name,
                       nodes: nodes as any,
                       edges: edges as any,
-                      settings: selectedWorkflow.settings
+                      settings: selectedWorkflow.settings,
                     });
                   }
                 }}
-                className="btn btn-primary text-xs py-1.5 px-4 font-semibold shadow-sm"
+                className="btn text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-xs"
               >
-                Save Workflow
+                <Copy size={14} className="text-slate-500" />
+                <span>Save Sequence</span>
+              </button>
+
+              {/* Auto Tidy Grid */}
+              <button
+                onClick={handleTidyLayout}
+                className="btn text-xs py-2 px-3 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                title="Organize canvas into tidy 2-row grid"
+              >
+                <LayoutGrid size={14} className="text-indigo-500" />
+                <span className="hidden sm:inline">Auto Tidy</span>
+              </button>
+
+              {/* Test Run */}
+              <button
+                onClick={async () => {
+                  if (selectedWorkflow) {
+                    const exec = await executeWorkflow(selectedWorkflow.id, undefined, true);
+                    setExecutionLogs(exec);
+                  }
+                }}
+                className="btn text-xs py-2 px-3 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <Play size={13} className="text-emerald-500" />
+                <span>Test Run</span>
+              </button>
+
+              {/* Activate / Start Campaign Toggle Button */}
+              <button
+                onClick={() => {
+                  if (selectedWorkflow) {
+                    toggleWorkflowActive(selectedWorkflow.id, !selectedWorkflow.is_active);
+                  }
+                }}
+                className={`btn text-xs py-2 px-4 font-bold flex items-center gap-1.5 shadow-sm transition-all ${
+                  selectedWorkflow?.is_active
+                    ? "bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 dark:bg-rose-950 dark:text-rose-300"
+                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
+                }`}
+              >
+                {selectedWorkflow?.is_active ? (
+                  <>
+                    <AlertTriangle size={14} />
+                    <span>Pause Campaign</span>
+                  </>
+                ) : (
+                  <>
+                    <Play size={14} />
+                    <span>Start Campaign</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
 
-          {/* Builder Body: Split Canvas & Node Manager Sidebar */}
-          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-            {/* Left: Main Interactive ReactFlow Canvas */}
-            <div className="flex-1 h-full relative">
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                nodeTypes={nodeTypes}
-                defaultEdgeOptions={edgeOptions}
-                onNodeClick={(_, node) => {
-                  setSelectedNode(node);
-                  setPanelTab("edit");
+          {/* Full Width Canvas Container (No squishing sidebar!) */}
+          <div className="w-full h-[760px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 overflow-hidden shadow-sm relative">
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              nodeTypes={nodeTypes}
+              defaultEdgeOptions={edgeOptions}
+              onNodeClick={(_, node) => handleOpenEditDrawer(node)}
+              fitView
+              className="w-full h-full"
+            >
+              <Background gap={24} size={1.5} color="#6366f125" />
+              <Controls className="!bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-md" />
+              <MiniMap
+                nodeColor={(n) => {
+                  if (n.data?.category === "trigger") return "#10b981";
+                  if (n.data?.category === "condition") return "#f59e0b";
+                  if (n.data?.category === "email") return "#0ea5e9";
+                  if (n.data?.category === "resume") return "#a855f7";
+                  return "#6366f1";
                 }}
-                fitView
-                className="bg-slate-100 dark:bg-slate-950"
-              >
-                <Background gap={22} size={1.5} color="#6366f120" />
-                <Controls className="!bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm" />
-                <MiniMap
-                  nodeColor={() => "#6366f1"}
-                  className="!bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm"
-                />
-              </ReactFlow>
+                className="!bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-md"
+              />
+            </ReactFlow>
+
+            {/* Floating Canvas Quick Tip */}
+            <div className="absolute bottom-4 left-4 z-10 hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/90 dark:bg-slate-900/90 backdrop-blur-xs border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 shadow-sm pointer-events-none">
+              <span>💡 Click any node to open settings drawer • Click 🗑️ to delete • Drag cyan dots to wire</span>
             </div>
+          </div>
+        </div>
+      )}
 
-            {/* Right: Dedicated Node Control Center Sidebar */}
-            <div className="w-full lg:w-96 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-800 flex flex-col bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-xs h-full">
-              {/* Tab Navigation */}
-              <div className="flex border-b border-slate-200 dark:border-slate-800 text-xs font-semibold bg-white dark:bg-slate-900">
-                <button
-                  onClick={() => setPanelTab("add")}
-                  className={`flex-1 py-2.5 px-3 flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
-                    panelTab === "add"
-                      ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20"
-                      : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
-                  }`}
-                >
-                  <Plus size={14} /> Add Nodes
-                </button>
-                <button
-                  onClick={() => setPanelTab("edit")}
-                  className={`flex-1 py-2.5 px-3 flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
-                    panelTab === "edit"
-                      ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20"
-                      : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
-                  }`}
-                >
-                  <Sliders size={14} /> Edit Node {selectedNode ? `✓` : ""}
-                </button>
-                <button
-                  onClick={() => setPanelTab("settings")}
-                  className={`flex-1 py-2.5 px-3 flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
-                    panelTab === "settings"
-                      ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20"
-                      : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
-                  }`}
-                >
-                  <Settings size={14} /> Settings
-                </button>
-              </div>
+      {/* --- SLIDE-OVER DRAWER (Add Step / Step Settings - Reference UI pattern) --- */}
+      {drawerMode !== "none" && (
+        <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-xs flex justify-end transition-opacity">
+          {/* Backdrop click to close */}
+          <div className="flex-1 cursor-pointer" onClick={() => setDrawerMode("none")} />
 
-              {/* Panel Content */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-                {/* --- TAB 1: ADD NODE PALETTE --- */}
-                {panelTab === "add" && (
-                  <div className="space-y-4">
+          {/* Slide-over panel */}
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col h-full transform transition-transform duration-300 ease-out z-10">
+            {/* 1. ADD STEP DRAWER (Reference Image 1) */}
+            {drawerMode === "add" && (
+              <>
+                {/* Header */}
+                <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                      <Plus size={18} />
+                    </div>
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">Add workflow step</h3>
+                  </div>
+                  <button
+                    onClick={() => setDrawerMode("none")}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs">
+                  {/* Section: Triggers */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                      <Zap size={14} /> Triggers
+                    </div>
                     <p className="text-[11px] text-slate-500">
-                      Click <strong>+ Add</strong> on any node below to append it to your workflow canvas and wire it up:
+                      Events that start this automated job application workflow:
                     </p>
 
-                    {/* Category: Triggers */}
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-600 flex items-center gap-1">
-                        <Upload size={12} /> Trigger Nodes
-                      </span>
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
-                        <div>
-                          <p className="font-bold text-xs">Job Poster Uploaded</p>
-                          <p className="text-[11px] text-slate-400">Triggers on image or PDF upload</p>
-                        </div>
-                        <button
-                          onClick={() => handleAddNode("trigger", "Job Poster Uploaded", "trigger", { description: "Triggers on image or PDF upload" })}
-                          className="btn text-xs py-1 px-2.5 bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-400"
-                        >
-                          + Add
-                        </button>
+                    <div
+                      onClick={() =>
+                        handleAddNodeFromDrawer("trigger", "Job Poster Upload", "trigger", {
+                          description: "Triggers automatically when a job poster image or PDF is uploaded.",
+                        })
+                      }
+                      className="group rounded-xl border border-dashed border-amber-300 dark:border-amber-800/80 hover:border-amber-500 bg-amber-50/30 dark:bg-amber-950/20 hover:bg-amber-50/80 dark:hover:bg-amber-950/40 p-3.5 cursor-pointer transition-all flex items-start gap-3 shadow-xs hover:shadow-md"
+                    >
+                      <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 shrink-0 group-hover:scale-105 transition-transform">
+                        <Upload size={18} />
                       </div>
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
-                        <div>
-                          <p className="font-bold text-xs">Manual Trigger</p>
-                          <p className="text-[11px] text-slate-400">Run workflow manually on demand</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                            Job Poster Upload
+                          </h4>
+                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                            Trigger
+                          </span>
                         </div>
-                        <button
-                          onClick={() => handleAddNode("trigger", "Manual Trigger", "trigger", { description: "Runs pipeline on manual trigger" })}
-                          className="btn text-xs py-1 px-2.5 bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-400"
-                        >
-                          + Add
-                        </button>
+                        <p className="text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                          Enrol leads from uploaded job posters (PNG, JPG, PDF) — extracts hiring info and kicks off the pipeline.
+                        </p>
                       </div>
                     </div>
 
-                    {/* Category: AI Nodes */}
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-600 flex items-center gap-1">
-                        <Sparkles size={12} /> AI Processing Nodes
-                      </span>
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
-                        <div>
-                          <p className="font-bold text-xs">AI Vision Extraction</p>
-                          <p className="text-[11px] text-slate-400">Extracts Company, Role & HR Email</p>
-                        </div>
-                        <button
-                          onClick={() => handleAddNode("ai", "AI Vision Extraction", "analyzeJob", { description: "Extracts Company, Role, Skills & HR Email" })}
-                          className="btn text-xs py-1 px-2.5 bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-400"
-                        >
-                          + Add
-                        </button>
+                    <div
+                      onClick={() =>
+                        handleAddNodeFromDrawer("trigger", "Manual Trigger", "trigger", {
+                          description: "Executes the pipeline on-demand for a selected job opening.",
+                        })
+                      }
+                      className="group rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 p-3.5 cursor-pointer transition-all flex items-start gap-3 shadow-xs hover:shadow-md"
+                    >
+                      <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 shrink-0 group-hover:scale-105 transition-transform">
+                        <Play size={18} />
                       </div>
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
-                        <div>
-                          <p className="font-bold text-xs">Generate Job Description</p>
-                          <p className="text-[11px] text-slate-400">Builds structured Markdown JD</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                            Manual Trigger
+                          </h4>
+                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                            On Demand
+                          </span>
                         </div>
-                        <button
-                          onClick={() => handleAddNode("ai", "Generate Job Description", "generateJd", { description: "Builds structured Markdown JD" })}
-                          className="btn text-xs py-1 px-2.5 bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-400"
-                        >
-                          + Add
-                        </button>
-                      </div>
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
-                        <div>
-                          <p className="font-bold text-xs">AI Email Drafter</p>
-                          <p className="text-[11px] text-slate-400">Personalized application email</p>
-                        </div>
-                        <button
-                          onClick={() => handleAddNode("email", "AI Email Drafter", "generateEmail", { tone: "formal", description: "Personalized application email" })}
-                          className="btn text-xs py-1 px-2.5 bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-400"
-                        >
-                          + Add
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Category: Resume Matching */}
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-purple-600 flex items-center gap-1">
-                        <FileCheck size={12} /> Resume Matching Nodes
-                      </span>
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
-                        <div>
-                          <p className="font-bold text-xs">Match Best Resume</p>
-                          <p className="text-[11px] text-slate-400">5-Factor weighted resume scoring</p>
-                        </div>
-                        <button
-                          onClick={() => handleAddNode("resume", "Match Best Resume", "matchResume", { description: "5-Factor Weighted Scoring Engine" })}
-                          className="btn text-xs py-1 px-2.5 bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100 dark:bg-purple-950 dark:text-purple-400"
-                        >
-                          + Add
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Category: Safety & Condition */}
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-amber-600 flex items-center gap-1">
-                        <ShieldCheck size={12} /> Safety & Condition Nodes
-                      </span>
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
-                        <div>
-                          <p className="font-bold text-xs">Safety Gate Check</p>
-                          <p className="text-[11px] text-slate-400">Checks Score & HR Email presence</p>
-                        </div>
-                        <button
-                          onClick={() => handleAddNode("condition", "Safety Gate Check", "condition", { threshold: 75, description: "Score >= 75% & Valid HR Email" })}
-                          className="btn text-xs py-1 px-2.5 bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-400"
-                        >
-                          + Add
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Category: Email Actions */}
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-sky-600 flex items-center gap-1">
-                        <Mail size={12} /> Email & Delivery Nodes
-                      </span>
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
-                        <div>
-                          <p className="font-bold text-xs">Send via Gmail</p>
-                          <p className="text-[11px] text-slate-400">Dispatches email with resume</p>
-                        </div>
-                        <button
-                          onClick={() => handleAddNode("email", "Send via Gmail", "sendGmail", { description: "Sends email with resume MIME attachment" })}
-                          className="btn text-xs py-1 px-2.5 bg-sky-50 text-sky-600 border-sky-200 hover:bg-sky-100 dark:bg-sky-950 dark:text-sky-400"
-                        >
-                          + Add
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Category: Tracking */}
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-rose-600 flex items-center gap-1">
-                        <CheckCircle2 size={12} /> Tracking & Lifecycle Nodes
-                      </span>
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
-                        <div>
-                          <p className="font-bold text-xs">Track Application</p>
-                          <p className="text-[11px] text-slate-400">Saves to Application Tracker</p>
-                        </div>
-                        <button
-                          onClick={() => handleAddNode("tracking", "Track Application", "saveApplication", { description: "Logs application & monitors replies" })}
-                          className="btn text-xs py-1 px-2.5 bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950 dark:text-rose-400"
-                        >
-                          + Add
-                        </button>
+                        <p className="text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                          Allows you to run this pipeline manually for any specific company or position.
+                        </p>
                       </div>
                     </div>
                   </div>
-                )}
 
-                {/* --- TAB 2: EDIT SELECTED NODE --- */}
-                {panelTab === "edit" && (
-                  <div className="space-y-4">
-                    {!selectedNode ? (
-                      <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center text-slate-400">
-                        <Sliders size={24} className="mx-auto mb-2 opacity-50" />
-                        <p className="font-semibold text-xs text-slate-600 dark:text-slate-300">No node selected</p>
-                        <p className="text-[11px] mt-1">Click any node on the canvas to edit its properties or delete it.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3.5">
-                        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-600">
-                              Selected Node
-                            </span>
-                            <p className="font-bold text-sm text-slate-900 dark:text-white">
-                              {String(selectedNode.data?.label || selectedNode.id)}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => setSelectedNode(null)}
-                            className="text-slate-400 hover:text-slate-600"
-                            title="Deselect"
+                  {/* Section: Workflow Steps */}
+                  <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+                    <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                      <Layers size={14} /> Workflow Steps
+                    </div>
+
+                    <div className="space-y-2">
+                      {WORKFLOW_STEP_PRESETS.map((step) => (
+                        <div
+                          key={step.id}
+                          onClick={() => handleAddNodeFromDrawer(step.category, step.label, step.type, step.extra)}
+                          className="group rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/60 p-3.5 cursor-pointer transition-all flex items-start gap-3.5 shadow-xs hover:shadow-md"
+                        >
+                          <div
+                            className={`p-2 rounded-lg ${step.iconBg} shrink-0 group-hover:scale-105 transition-transform`}
                           >
-                            <X size={16} />
-                          </button>
-                        </div>
-
-                        {/* Node Label */}
-                        <div>
-                          <label className="text-[10px] uppercase font-bold text-slate-500">Node Title / Label</label>
-                          <input
-                            className="input w-full mt-1 text-xs py-1.5"
-                            value={typeof selectedNode.data?.label === "string" ? selectedNode.data.label : ""}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setNodes((nds) =>
-                                nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...n.data, label: val } } : n))
-                              );
-                            }}
-                          />
-                        </div>
-
-                        {/* Node Description */}
-                        <div>
-                          <label className="text-[10px] uppercase font-bold text-slate-500">Step Description</label>
-                          <textarea
-                            rows={3}
-                            className="input w-full mt-1 text-xs"
-                            value={typeof selectedNode.data?.description === "string" ? selectedNode.data.description : ""}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setNodes((nds) =>
-                                nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...n.data, description: val } } : n))
-                              );
-                            }}
-                          />
-                        </div>
-
-                        {/* Condition Threshold Config */}
-                        {selectedNode.data?.threshold !== undefined && (
-                          <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-2">
+                            {step.icon}
+                          </div>
+                          <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
-                              <label className="text-xs font-bold text-amber-800 dark:text-amber-300">
-                                Match Score Threshold
-                              </label>
-                              <span className="text-xs font-bold font-mono text-amber-900 dark:text-amber-200">
-                                {String(selectedNode.data.threshold)}%
+                              <h4 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                                {step.label}
+                              </h4>
+                              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+                                {step.categoryBadge}
                               </span>
                             </div>
-                            <input
-                              type="range"
-                              min="30"
-                              max="95"
-                              step="5"
-                              className="w-full accent-amber-600"
-                              value={typeof selectedNode.data.threshold === "number" ? selectedNode.data.threshold : 75}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value) || 75;
-                                setNodes((nds) =>
-                                  nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...n.data, threshold: val } } : n))
-                                );
-                              }}
-                            />
-                            <p className="text-[10px] text-amber-700 dark:text-amber-400">
-                              Applications with a match score below {String(selectedNode.data.threshold)}% will be paused for manual review.
+                            <p className="text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                              {step.description}
                             </p>
                           </div>
-                        )}
-
-                        {/* Email Tone Config */}
-                        {selectedNode.data?.tone !== undefined && (
-                          <div>
-                            <label className="text-[10px] uppercase font-bold text-slate-500">Email Tone</label>
-                            <select
-                              className="input w-full mt-1 text-xs py-1.5"
-                              value={String(selectedNode.data.tone || "formal")}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setNodes((nds) =>
-                                  nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...n.data, tone: val } } : n))
-                                );
-                              }}
-                            >
-                              <option value="formal">Formal & Professional</option>
-                              <option value="friendly">Warm & Enthusiastic</option>
-                              <option value="concise">Short & Direct</option>
-                            </select>
-                          </div>
-                        )}
-
-                        {/* Node Actions */}
-                        <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
-                          <button
-                            onClick={() => handleDeleteNode(selectedNode.id)}
-                            className="w-full btn bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-900 py-2 flex items-center justify-center gap-1.5 font-bold"
-                          >
-                            <Trash2 size={13} /> Remove Node From Canvas
-                          </button>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* --- TAB 3: WORKFLOW SETTINGS --- */}
-                {panelTab === "settings" && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-[10px] uppercase font-bold text-slate-500">Pipeline Name</label>
-                      <input
-                        className="input w-full mt-1 text-xs py-1.5"
-                        value={selectedWorkflow?.name || ""}
-                        onChange={(e) => {
-                          if (selectedWorkflow) {
-                            setSelectedWorkflow({ ...selectedWorkflow, name: e.target.value });
-                          }
-                        }}
-                      />
+                      ))}
                     </div>
+                  </div>
+                </div>
 
-                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-xs">Auto-Send via Gmail</span>
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300 text-indigo-600"
-                          checked={selectedWorkflow?.settings?.auto_send || false}
-                          onChange={(e) => {
-                            if (selectedWorkflow) {
-                              setSelectedWorkflow({
-                                ...selectedWorkflow,
-                                settings: { ...selectedWorkflow.settings, auto_send: e.target.checked }
-                              });
-                            }
+                {/* Sticky Footer */}
+                <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex items-center justify-between">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Select a trigger or step to add to sequence
+                  </span>
+                  <button
+                    onClick={() => setDrawerMode("none")}
+                    className="btn text-xs py-2 px-4 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* 2. EDIT STEP SETTINGS DRAWER (Reference Image 3) */}
+            {drawerMode === "edit" && selectedNode && (
+              <>
+                {/* Header */}
+                <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 truncate">
+                    <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                      <Sliders size={18} />
+                    </div>
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white truncate">
+                      {editFormData.label} settings
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => {
+                        handleDeleteNode(selectedNode.id);
+                        setDrawerMode("none");
+                      }}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 px-2.5 py-1.5 rounded-lg transition-colors border border-rose-200 dark:border-rose-900/60"
+                      title="Delete this step from workflow"
+                    >
+                      <Trash2 size={14} />
+                      <span>Delete Step</span>
+                    </button>
+                    <button
+                      onClick={() => setDrawerMode("none")}
+                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-6 space-y-5 text-xs">
+                  {/* STEP TITLE */}
+                  <div>
+                    <label className="text-[11px] uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400 block mb-1.5">
+                      Step Title
+                    </label>
+                    <input
+                      className="input w-full text-xs py-2 px-3"
+                      value={editFormData.label}
+                      onChange={(e) => setEditFormData((prev) => ({ ...prev, label: e.target.value }))}
+                      placeholder="e.g. AI Vision Extraction"
+                    />
+                  </div>
+
+                  {/* DESCRIPTION */}
+                  <div>
+                    <label className="text-[11px] uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400 block mb-1.5">
+                      Step Description / Instructions
+                    </label>
+                    <textarea
+                      rows={3}
+                      className="input w-full text-xs p-3 leading-relaxed"
+                      value={editFormData.description}
+                      onChange={(e) => setEditFormData((prev) => ({ ...prev, description: e.target.value }))}
+                      placeholder="Describe what this step does in the automation sequence..."
+                    />
+                  </div>
+
+                  {/* VARIABLE CHIPS */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">
+                      Available Variables (click to copy)
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        "{{companyName}}",
+                        "{{jobTitle}}",
+                        "{{hrEmail}}",
+                        "{{candidateName}}",
+                        "{{matchingSkills}}",
+                        "{{matchScore}}",
+                      ].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(v);
+                            toast(`Copied ${v} to clipboard!`);
                           }}
-                        />
+                          className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 dark:bg-slate-800 dark:hover:bg-indigo-950/60 dark:hover:text-indigo-300 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors"
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Condition: Threshold Slider */}
+                  {editFormData.threshold !== undefined && (
+                    <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wide">
+                          Match Score Threshold
+                        </label>
+                        <span className="text-sm font-bold font-mono px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100">
+                          {editFormData.threshold}%
+                        </span>
                       </div>
-                      <p className="text-[11px] text-slate-400 leading-tight">
-                        When enabled, applications meeting the minimum match threshold will be sent automatically.
+                      <input
+                        type="range"
+                        min="30"
+                        max="95"
+                        step="5"
+                        className="w-full accent-amber-600 h-2 bg-amber-200 rounded-lg cursor-pointer dark:bg-amber-800"
+                        value={editFormData.threshold}
+                        onChange={(e) =>
+                          setEditFormData((prev) => ({ ...prev, threshold: parseInt(e.target.value) || 75 }))
+                        }
+                      />
+                      <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
+                        Applications with resume match scores below {editFormData.threshold}% will be paused for manual review before sending.
                       </p>
                     </div>
+                  )}
 
-                    <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
-                      <button
-                        onClick={handleTidyLayout}
-                        className="btn w-full text-xs py-2 flex items-center justify-center gap-2 border-slate-200 dark:border-slate-700"
-                      >
-                        <LayoutGrid size={14} className="text-indigo-500" /> Tidy / Auto-Layout Canvas
-                      </button>
+                  {/* Email: Tone and Subject */}
+                  {selectedNode.data?.category === "email" && (
+                    <div className="space-y-4 rounded-xl border border-sky-200 dark:border-sky-900/50 bg-sky-50/30 dark:bg-sky-950/20 p-4">
+                      <div>
+                        <label className="text-[11px] uppercase font-bold tracking-wider text-sky-900 dark:text-sky-300 block mb-1.5">
+                          Email Tone
+                        </label>
+                        <select
+                          className="input w-full text-xs py-2 px-3"
+                          value={editFormData.tone || "formal"}
+                          onChange={(e) => setEditFormData((prev) => ({ ...prev, tone: e.target.value }))}
+                        >
+                          <option value="formal">Formal & Professional (Standard)</option>
+                          <option value="friendly">Warm & Enthusiastic (Startups / Creative)</option>
+                          <option value="concise">Short & Direct (Quick pitches)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] uppercase font-bold tracking-wider text-sky-900 dark:text-sky-300 block mb-1.5">
+                          Subject Line Template
+                        </label>
+                        <input
+                          className="input w-full text-xs py-2 px-3"
+                          value={editFormData.subjectTemplate || "Application for {{jobTitle}} – {{candidateName}}"}
+                          onChange={(e) => setEditFormData((prev) => ({ ...prev, subjectTemplate: e.target.value }))}
+                          placeholder="Application for {{jobTitle}} – {{candidateName}}"
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            </div>
+                  )}
+
+                  {/* AI Model selector */}
+                  {selectedNode.data?.category === "ai" && (
+                    <div className="rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/30 dark:bg-indigo-950/20 p-4 space-y-3">
+                      <label className="text-[11px] uppercase font-bold tracking-wider text-indigo-900 dark:text-indigo-300 block">
+                        Vision & LLM Engine
+                      </label>
+                      <select
+                        className="input w-full text-xs py-2 px-3"
+                        value={editFormData.model || "gpt-4o-mini"}
+                        onChange={(e) => setEditFormData((prev) => ({ ...prev, model: e.target.value }))}
+                      >
+                        <option value="gpt-4o-mini">OpenAI GPT-4o-mini (Fast & Accurate OCR)</option>
+                        <option value="gemini-1.5-flash">Google Gemini 1.5 Flash (Ultra Fast)</option>
+                      </select>
+                      <p className="text-[11px] text-indigo-700 dark:text-indigo-400">
+                        Automatically reads poster graphics, detects recruiter emails, and parses role requirements.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Sticky Footer */}
+                <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex items-center justify-between">
+                  <button
+                    onClick={() => setDrawerMode("none")}
+                    className="btn text-xs py-2 px-4 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleUpdateNodeFromDrawer}
+                    className="btn text-xs py-2 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+                  >
+                    <CheckCircle2 size={14} />
+                    <span>Update Node</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
