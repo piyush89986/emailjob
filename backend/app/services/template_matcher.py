@@ -23,15 +23,24 @@ ROLE_STOPWORDS = {
     "candidate", "mail", "email", "template", "outreach", "cold", "pitch"
 }
 
+# Generic role suffixes (sharing ONLY generic words like 'developer' does not count as role match)
+GENERIC_ROLE_SUFFIXES = {
+    "developer", "engineer", "specialist", "executive", "associate",
+    "intern", "lead", "manager", "head", "officer", "consultant", "worker", "team"
+}
+
 # Role synonym & acronym dictionary for intelligent matching
 ROLE_ALIASES = {
     "bde": ["business development executive", "business development", "sales executive", "bd executive"],
     "bda": ["business development associate", "business development"],
     "sde": ["software development engineer", "software engineer", "software developer"],
     "swe": ["software engineer", "software developer"],
+    "mern": ["mern stack", "mernstack", "full stack", "react", "node"],
+    "mernstack": ["mern stack", "mern", "full stack", "react developer", "node developer"],
+    "mean": ["mean stack", "meanstack", "angular", "node"],
     "frontend": ["front end", "fe", "ui developer", "react developer", "vue developer", "angular"],
     "backend": ["back end", "be", "api developer", "python developer", "node developer", "java developer"],
-    "fullstack": ["full stack", "full-stack", "mern", "mean"],
+    "fullstack": ["full stack", "full-stack", "mern", "mernstack", "mean"],
     "pm": ["product manager", "project manager", "program manager"],
     "qa": ["quality assurance", "software tester", "sdet", "test engineer"],
     "hr": ["human resources", "talent acquisition", "recruiter", "talent partner"],
@@ -47,13 +56,28 @@ class TemplateMatcher:
     """Matches candidate job roles against user's saved email templates."""
 
     @staticmethod
-    def _clean_tokens(text: str) -> set:
-        """Extract clean alphanumeric lowercase tokens, filtering common stopwords."""
+    def _normalize_phrase(text: str) -> str:
+        """Normalizes common abbreviations, acronyms, and compounds (e.g. mernstack -> mern stack)."""
         if not text:
-            return set()
-        clean = re.sub(r"[^\w\s]", " ", text.lower())
-        tokens = clean.split()
-        return {t for t in tokens if len(t) > 1 and t not in ROLE_STOPWORDS}
+            return ""
+        t = text.lower()
+        t = re.sub(r"\bmernstack\b", "mern stack", t)
+        t = re.sub(r"\bmeanstack\b", "mean stack", t)
+        t = re.sub(r"\bfullstack\b", "full stack", t)
+        t = re.sub(r"\bfrontend\b", "front end", t)
+        t = re.sub(r"\bbackend\b", "back end", t)
+        t = re.sub(r"\bdevops\b", "dev ops", t)
+        return t
+
+    @classmethod
+    def _extract_tokens(cls, text: str) -> Tuple[set, set]:
+        """Extracts domain tokens and generic suffix tokens."""
+        norm = cls._normalize_phrase(text)
+        clean = re.sub(r"[^\w\s]", " ", norm)
+        words = [w for w in clean.split() if len(w) > 1 and w not in ROLE_STOPWORDS]
+        domains = {w for w in words if w not in GENERIC_ROLE_SUFFIXES}
+        generics = {w for w in words if w in GENERIC_ROLE_SUFFIXES}
+        return domains, generics
 
     @classmethod
     def _score_template_match(cls, role_title: str, template: Template) -> float:
@@ -61,51 +85,48 @@ class TemplateMatcher:
         if not role_title or not template:
             return 0.0
 
-        clean_role = re.sub(r"[^\w\s]", " ", role_title.lower()).strip()
-        tpl_name = re.sub(r"[^\w\s]", " ", (template.name or "").lower()).strip()
-        tpl_subj = re.sub(r"[^\w\s]", " ", (template.subject or "").lower()).strip()
+        norm_role = cls._normalize_phrase(role_title).strip()
+        norm_tpl_name = cls._normalize_phrase(template.name or "").strip()
+        tpl_subj = (template.subject or "").lower()
 
-        # 1. Exact or direct substring match in template name (e.g. "BDE" in "BDE Application")
-        if clean_role and tpl_name:
-            if clean_role in tpl_name or tpl_name in clean_role:
-                # Custom user template scores higher than global template
-                return 1.0 if not template.global_template else 0.9
+        # 1. Exact or direct substring match in template name (e.g. "mernstack developer" in "MERN Stack Developer")
+        if norm_role and norm_tpl_name:
+            if norm_role in norm_tpl_name or norm_tpl_name in norm_role:
+                return 1.0 if not template.global_template else 0.95
 
-        role_tokens = cls._clean_tokens(role_title)
-        tpl_name_tokens = cls._clean_tokens(template.name)
-        tpl_subj_tokens = cls._clean_tokens(template.subject)
-        combined_tpl_tokens = tpl_name_tokens.union(tpl_subj_tokens)
+        r_domains, r_generics = cls._extract_tokens(role_title)
+        t_domains, t_generics = cls._extract_tokens(f"{template.name} {tpl_subj}")
 
-        # 2. Check acronym / alias expansions
-        expanded_role_terms = set(role_tokens)
-        for term in list(role_tokens):
+        # Check aliases
+        expanded_role_domains = set(r_domains)
+        for term in list(r_domains):
             if term in ROLE_ALIASES:
                 for alias in ROLE_ALIASES[term]:
-                    expanded_role_terms.update(cls._clean_tokens(alias))
-            for key, aliases in ROLE_ALIASES.items():
-                if any(clean_term in clean_role for clean_term in aliases):
-                    expanded_role_terms.add(key)
-                    expanded_role_terms.update(cls._clean_tokens(key))
+                    alias_d, _ = cls._extract_tokens(alias)
+                    expanded_role_domains.update(alias_d)
 
-        if not role_tokens or not combined_tpl_tokens:
+        for key, aliases in ROLE_ALIASES.items():
+            if any(cls._normalize_phrase(clean_term) in norm_role for clean_term in aliases):
+                key_d, _ = cls._extract_tokens(key)
+                expanded_role_domains.update(key_d)
+
+        # A valid match MUST share domain keywords (e.g. 'mern', 'react', 'sales', 'python')
+        # Merely sharing 'developer' or 'engineer' is NOT enough!
+        shared_domains = expanded_role_domains.intersection(t_domains)
+        if not shared_domains:
             return 0.0
 
-        # 3. Intersect tokens
-        intersect = expanded_role_terms.intersection(combined_tpl_tokens)
-        if not intersect:
-            return 0.0
+        domain_ratio = len(shared_domains) / max(len(r_domains), 1)
+        shared_generics = r_generics.intersection(t_generics)
+        generic_bonus = 0.15 if shared_generics else 0.0
 
-        # Calculate overlap ratio against base role tokens
-        overlap_ratio = len(intersect) / max(len(role_tokens), 1)
+        score = 0.5 + (0.35 * min(domain_ratio, 1.0)) + generic_bonus
 
-        # Base score
-        score = 0.5 + (0.4 * min(overlap_ratio, 1.0))
-
-        # Preference bonus for tenant-created custom templates
+        # Bonus preference for custom tenant templates over global seed templates
         if not template.global_template:
-            score += 0.1
+            score += 0.08
 
-        return min(score, 0.98)
+        return min(round(score, 2), 0.98)
 
     @classmethod
     async def find_best_template_for_role(
@@ -148,19 +169,47 @@ class TemplateMatcher:
     def render_template_text(template_str: str, variables: Dict[str, Any]) -> str:
         """Substitutes dynamic variables into template text.
 
-        Handles {{var}}, {{ var }}, {var}, { var } with case-insensitivity.
+        Handles {{var}}, {{ var }}, {var}, { var }, as well as bracket variables [Name], [Company], [Role], etc.
         """
         if not template_str:
             return ""
 
         rendered = template_str
+
+        # 1. Curly brace placeholders {{key}}, {key}
         for key, raw_val in variables.items():
             val = str(raw_val) if raw_val is not None else ""
-            # Regex pattern matches {{key}}, {{ key }}, {key}, { key }
             pattern = re.compile(rf"\{{\{{\s*{re.escape(key)}\s*\}}\}}|\{{\s*{re.escape(key)}\s*\}}", re.IGNORECASE)
             rendered = pattern.sub(val, rendered)
 
-        # Clean up any leftover empty placeholders like {{foo}}
+        # 2. Square bracket placeholders common in custom outreach templates (e.g. [Name], [Company])
+        candidate_name = variables.get("candidateName") or variables.get("my_name") or "Applicant"
+        company = variables.get("company") or variables.get("companyName") or "your company"
+        role = variables.get("role") or variables.get("jobTitle") or "the open position"
+
+        bracket_mappings = {
+            "name": candidate_name,
+            "candidate name": candidate_name,
+            "my name": candidate_name,
+            "company": company,
+            "company name": company,
+            "brand": company,
+            "fund": company,
+            "fund name": company,
+            "role": role,
+            "position": role,
+            "job title": role,
+            "specific project": "your latest initiatives and technology roadmap",
+            "specific observation": "your innovative engineering work and product momentum",
+            "specific process or opportunity": "your software engineering workflow and team goals",
+            "industry/product": "the technology ecosystem",
+        }
+
+        for b_key, b_val in bracket_mappings.items():
+            pattern = re.compile(rf"\[\s*{re.escape(b_key)}\s*\]", re.IGNORECASE)
+            rendered = pattern.sub(str(b_val), rendered)
+
+        # Clean up any leftover empty placeholders
         rendered = re.sub(r"\{\{[^}]+\}\}", "", rendered)
         return rendered
 

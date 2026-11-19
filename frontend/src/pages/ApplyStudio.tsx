@@ -113,7 +113,7 @@ function CustomWorkflowNode({ data, id, selected }: { data: any; id: string; sel
     stripeColor = "bg-sky-500";
     iconBoxBg = "bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400";
     icon = <Mail size={16} />;
-    categoryLabel = "Email";
+    categoryLabel = "TEMPLATES + AI";
   } else if (isResume) {
     stripeColor = "bg-purple-500";
     iconBoxBg = "bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400";
@@ -191,6 +191,25 @@ function CustomWorkflowNode({ data, id, selected }: { data: any; id: string; sel
           <div className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 px-2.5 py-1 text-[11px] font-medium text-amber-800 dark:text-amber-300">
             <span>Pass Threshold</span>
             <span className="font-bold font-mono">≥ {data.threshold}%</span>
+          </div>
+        )}
+
+        {isEmail && (
+          <div className="rounded-lg bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 p-2 space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-semibold text-indigo-950 dark:text-indigo-200">
+              <span className="flex items-center gap-1.5">
+                <FileText size={12} className="text-indigo-600 dark:text-indigo-400" />
+                <span>Template Search</span>
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-200 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200">
+                {data.templateId ? "Selected Template" : "Templates First"}
+              </span>
+            </div>
+            <p className="text-[10px] text-indigo-700 dark:text-indigo-300/90 leading-tight">
+              {data.templateId
+                ? "Using selected custom template."
+                : "Pehle saved Templates me role match karega (e.g. mernstack); na milne par AI likhega."}
+            </p>
           </div>
         )}
 
@@ -302,15 +321,16 @@ const WORKFLOW_STEP_PRESETS = [
   },
   {
     id: "ai-email",
-    label: "Email Template / AI Drafter",
+    label: "Email Drafter (Templates + AI)",
     category: "email",
     type: "generateEmail",
-    categoryBadge: "Smart Drafter",
+    categoryBadge: "Templates First",
     icon: <Mail size={18} />,
     iconBg: "bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400",
-    description: "Matches role template from Email Templates; falls back to AI drafting if not found.",
+    description: "Pehle saved Templates se role match karta hai; agar na mile toh AI email generate karta hai.",
     extra: {
-      description: "Matches role template from Email Templates; falls back to AI drafting if not found.",
+      label: "Email Drafter (Templates + AI)",
+      description: "Pehle saved Templates se role match karta hai; agar na mile toh AI email generate karta hai.",
       tone: "formal",
       templateMatching: true,
       subjectTemplate: "Application for {{role}} – {{my_name}}",
@@ -318,15 +338,16 @@ const WORKFLOW_STEP_PRESETS = [
   },
   {
     id: "email-template",
-    label: "Email Template",
+    label: "Email Templates Matcher",
     category: "email",
     type: "generateEmail",
-    categoryBadge: "Template Matcher",
+    categoryBadge: "Templates Search",
     icon: <FileText size={18} />,
     iconBg: "bg-violet-50 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400",
-    description: "Populates a specific or role-matched template from saved Email Templates.",
+    description: "Pehle saved Templates me role match karta hai (e.g. mernstack developer); na milne par AI draft karega.",
     extra: {
-      description: "Matches role template from Email Templates; falls back to AI drafting if not found.",
+      label: "Email Templates Matcher",
+      description: "Pehle saved Templates me role match karta hai; na milne par AI draft karega.",
       tone: "formal",
       templateMatching: true,
       subjectTemplate: "Application for {{role}} – {{my_name}}",
@@ -1984,6 +2005,44 @@ export default function ApplyStudio() {
                             : "Selected template will be used directly with dynamic variables ({{role}}, {{company}}, {{my_name}}, etc.) replaced."}
                         </p>
                       </div>
+
+                      {/* Visual list of user's saved templates from /templates */}
+                      {savedTemplates.length > 0 && (
+                        <div className="rounded-lg bg-white/70 dark:bg-slate-900/60 border border-sky-100 dark:border-sky-900/40 p-3 space-y-2">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">
+                              Your Saved Templates ({savedTemplates.length})
+                            </span>
+                            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
+                              From Templates Page
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {savedTemplates.map((t) => (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() =>
+                                  setEditFormData((prev) => ({
+                                    ...prev,
+                                    templateId: prev.templateId === t.id ? "" : t.id,
+                                  }))
+                                }
+                                className={`text-[10px] px-2 py-0.5 rounded-md font-medium border transition-colors ${
+                                  editFormData.templateId === t.id
+                                    ? "bg-indigo-600 text-white border-indigo-600 font-bold"
+                                    : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                                }`}
+                              >
+                                {t.name}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                            Target role se match hone wala template automatically select hoga (e.g. <em>mernstack developer</em>). Agar specific template lock karna hai toh click karein.
+                          </p>
+                        </div>
+                      )}
 
                       {/* Tone selector */}
                       <div>

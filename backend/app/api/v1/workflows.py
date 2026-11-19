@@ -87,9 +87,9 @@ def get_default_workflow_nodes_and_edges():
             "type": "generateEmail",
             "position": {"x": 820, "y": 340},
             "data": {
-                "label": "Email Template / AI Drafter",
+                "label": "Email Drafter (Templates + AI)",
                 "category": "email",
-                "description": "Matches role template from Email Templates; falls back to AI drafting if not found"
+                "description": "Pehle saved Templates se role match karta hai; na milne par AI email draft karega"
             }
         },
         {
