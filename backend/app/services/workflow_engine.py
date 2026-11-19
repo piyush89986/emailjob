@@ -205,15 +205,19 @@ class WorkflowEngine:
                         extracted_dict = execution.context_data.get("extracted_data", {})
                         hr_email = extracted_dict.get("hr_email")
                         match_score = execution.context_data.get("match_score", 0)
-                        min_score = node_data.get("threshold", workflow.settings.min_match_score)
 
-                        # Check 1: Missing HR Email
+                        # Check 1: Missing HR Email (Always required to send an application)
                         if not hr_email:
                             raise AppError("HR email is missing from job poster", status_code=400)
 
-                        # Check 2: Match score threshold
-                        if match_score < min_score:
-                            raise AppError(f"Match score {match_score}% is below required threshold of {min_score}%", status_code=400)
+                        # Check 2: Match score threshold (ONLY if explicitly configured > 0, disabled by default!)
+                        configured_threshold = node_data.get("threshold")
+                        if configured_threshold is None:
+                            configured_threshold = getattr(workflow.settings, "min_match_score", 0) or 0
+
+                        if configured_threshold and int(configured_threshold) > 0:
+                            if match_score < int(configured_threshold):
+                                raise AppError(f"Match score {match_score}% is below configured threshold of {configured_threshold}%", status_code=400)
 
                         # Check 3: Duplicate application check
                         existing_app = await Application.find_one(
@@ -223,7 +227,7 @@ class WorkflowEngine:
                         if existing_app:
                             raise AppError(f"Application to {hr_email} already exists ({existing_app.company}). Flagged as duplicate.", status_code=400)
 
-                        await log_step("All safety checks passed (HR Email present, score >= threshold, no duplicate)", level="success", node_id=current_node.id)
+                        await log_step(f"Safety check passed (Recipient: {hr_email}, Resume Match: {match_score}%)", level="success", node_id=current_node.id)
 
                     # --- Node Type 6: AI / Template Email Generation ---
                     elif node_type in ["generateEmail", "GENERATE_EMAIL", "emailTemplate", "EMAIL_TEMPLATE"]:

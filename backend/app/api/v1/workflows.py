@@ -81,7 +81,7 @@ def get_default_workflow_nodes_and_edges():
             "id": "node-5",
             "type": "condition",
             "position": {"x": 1200, "y": 340},
-            "data": {"label": "Safety Gate Check", "category": "condition", "threshold": 75, "description": "Verifies Match Score >= 75% & Valid HR Email"}
+            "data": {"label": "Safety Gate Check", "category": "condition", "threshold": 0, "description": "Verifies valid recruiter HR email presence"}
         },
         {
             "id": "node-6",
@@ -135,7 +135,7 @@ async def list_workflows(user: User = Depends(get_current_user)):
             trigger_type="JOB_IMAGE_UPLOADED",
             nodes=[WorkflowNode(**n) for n in nodes_raw],
             edges=[WorkflowEdge(**e) for e in edges_raw],
-            settings=WorkflowSettings(min_match_score=75, auto_send=False, fallback_to_manual=True)
+            settings=WorkflowSettings(min_match_score=0, auto_send=False, fallback_to_manual=True)
         )
         await wf.insert()
         workflows = [wf]

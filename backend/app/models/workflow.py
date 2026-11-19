@@ -24,7 +24,7 @@ class WorkflowEdge(BaseModel):
 
 
 class WorkflowSettings(BaseModel):
-    min_match_score: int = 70
+    min_match_score: int = 0  # 0 = Disabled by default (only enforced if explicitly set > 0)
     auto_send: bool = False
     fallback_to_manual: bool = True
     delay_between_steps_sec: int = 1
