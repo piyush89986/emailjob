@@ -13,6 +13,7 @@ from app.repositories.domain import (
     MessageRepo,
     ProfileRepo,
     ResumeRepo,
+    RoleResumeRepo,
     SettingsRepo,
     TemplateRepo,
     ThreadRepo,
@@ -92,6 +93,10 @@ def get_settings_repo(user: User = Depends(get_current_user)) -> SettingsRepo:
 
 def get_resume_repo(user: User = Depends(get_current_user)) -> ResumeRepo:
     return ResumeRepo(user.tenant_id)
+
+
+def get_role_resume_repo(user: User = Depends(get_current_user)) -> RoleResumeRepo:
+    return RoleResumeRepo(user.tenant_id)
 
 
 def get_audit_repo(user: User = Depends(get_current_user)) -> AuditRepo:

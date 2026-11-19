@@ -11,6 +11,7 @@ from app.models.application import Application
 from app.models.profile import Profile
 from app.models.settings import TenantSettings
 from app.models.resume import ResumeVersion
+from app.models.role_resume import RoleResume
 from app.models.attachment import Attachment
 from app.models.audit_log import AuditLog
 
@@ -27,6 +28,7 @@ ALL_DOCUMENT_MODELS = [
     Profile,
     TenantSettings,
     ResumeVersion,
+    RoleResume,
     Attachment,
     AuditLog,
 ]
@@ -44,6 +46,7 @@ __all__ = [
     "Profile",
     "TenantSettings",
     "ResumeVersion",
+    "RoleResume",
     "Attachment",
     "AuditLog",
     "ALL_DOCUMENT_MODELS",

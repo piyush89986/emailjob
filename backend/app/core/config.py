@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     ai_monthly_dollar_limit: float = 20.0
 
+    # Cloudinary File Storage
+    cloudinary_cloud_name: str = ""
+    cloudinary_api_key: str = ""
+    cloudinary_api_secret: str = ""
+    cloudinary_url: str = ""
+
     # Rate Limiting
     rate_limit_auth_per_minute: int = 20
     rate_limit_ai_per_minute: int = 15

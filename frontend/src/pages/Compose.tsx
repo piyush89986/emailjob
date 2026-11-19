@@ -9,6 +9,7 @@ export default function Compose() {
   const profile = useS((s) => s.profile);
   const prefs = useS((s) => s.prefs);
   const resumes = useS((s) => s.resumes);
+  const roleResumes = useS((s) => s.roleResumes);
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("");
   const [attach, setAttach] = useState<string[]>([]);
@@ -210,12 +211,44 @@ export default function Compose() {
             <div className="flex flex-wrap items-center gap-2">
               <select
                 className="input w-auto text-sm"
-                onChange={(e) => e.target.value && setAttach([...new Set([...attach, e.target.value])])}
+                value=""
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (!val) return;
+                  if (val.startsWith("role:")) {
+                    const id = val.replace("role:", "");
+                    const r = roleResumes.find((x) => x.id === id);
+                    if (r) {
+                      setAttach((prev) => [...new Set([...prev, r.filename])]);
+                      const attId = r.attachmentId || r.id;
+                      if (attId) setAttachIds((prev) => [...prev, attId]);
+                    }
+                  } else if (val.startsWith("ver:")) {
+                    const id = val.replace("ver:", "");
+                    const r = resumes.find((x) => x.id === id);
+                    if (r) setAttach((prev) => [...new Set([...prev, `${r.label}.pdf`])]);
+                  }
+                }}
               >
-                <option value="">Saved resume versions…</option>
-                {resumes.map((r) => (
-                  <option key={r.id}>{r.label}.pdf</option>
-                ))}
+                <option value="">Attach saved resume…</option>
+                {roleResumes.length > 0 && (
+                  <optgroup label="Uploaded Resumes by Role">
+                    {roleResumes.map((r) => (
+                      <option key={r.id} value={`role:${r.id}`}>
+                        [{r.role}] {r.filename} {r.isDefault ? "⭐" : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {resumes.length > 0 && (
+                  <optgroup label="AI Tailored Versions">
+                    {resumes.map((r) => (
+                      <option key={r.id} value={`ver:${r.id}`}>
+                        {r.label}.pdf (ATS {r.ats}%)
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
               <input
                 type="file"

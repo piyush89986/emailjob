@@ -14,6 +14,7 @@ from app.models.application import Application
 from app.models.profile import Profile
 from app.models.settings import TenantSettings
 from app.models.resume import ResumeVersion
+from app.models.role_resume import RoleResume
 from app.models.attachment import Attachment
 from app.models.audit_log import AuditLog
 from app.repositories.base import TenantRepository
@@ -278,6 +279,22 @@ class ResumeRepo(TenantRepository[ResumeVersion]):
 
     async def list_versions(self) -> List[ResumeVersion]:
         return await self.find_all(sort=[("at", DESCENDING)])
+
+
+class RoleResumeRepo(TenantRepository[RoleResume]):
+    model = RoleResume
+
+    async def list_by_tenant(self) -> List[RoleResume]:
+        return await self.find_all(sort=[("created_at", DESCENDING)])
+
+    async def find_by_role(self, role: str) -> List[RoleResume]:
+        return await self.find_all(RoleResume.role == role, sort=[("created_at", DESCENDING)])
+
+    async def clear_default_for_role(self, role: str):
+        resumes = await self.find_by_role(role)
+        for r in resumes:
+            if r.is_default:
+                await self.update(r.id, is_default=False)
 
 
 class AttachmentRepo(TenantRepository[Attachment]):

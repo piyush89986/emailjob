@@ -33,6 +33,7 @@ from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.account import router as account_router
 from app.api.v1.events import router as events_router
 from app.api.v1.webhooks import router as webhooks_router
+from app.api.v1.role_resumes import router as role_resumes_router
 
 settings = get_settings()
 setup_logging()
@@ -195,3 +196,5 @@ app.include_router(dashboard_router)
 app.include_router(account_router)
 app.include_router(events_router)
 app.include_router(webhooks_router)
+app.include_router(role_resumes_router)
+app.include_router(role_resumes_router, prefix="/api")

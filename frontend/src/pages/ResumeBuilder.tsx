@@ -1,7 +1,22 @@
 import { useEffect, useState } from "react";
-import { Exp, Profile, saveProfile, set, toast, uid, useS } from "@/lib/store";
+import { useNavigate } from "react-router-dom";
+import { Cloud, ExternalLink, FileText, Star, Trash2 } from "lucide-react";
+import {
+  Exp,
+  Profile,
+  RoleResume,
+  deleteRoleResume,
+  fetchRoleResumes,
+  saveProfile,
+  set,
+  setDefaultRoleResume,
+  toast,
+  uid,
+  uploadRoleResume,
+  useS,
+} from "@/lib/store";
 import { tailorResume } from "@/lib/ai";
-import { api } from "@/api/client";
+import { api, getApiBaseUrl, tokens } from "@/api/client";
 import { Page, Tabs } from "@/components/ui";
 
 type Result = ReturnType<typeof tailorResume>;
@@ -185,10 +200,298 @@ export function ProfileEditor() {
   );
 }
 
+const SUGGESTED_ROLES = [
+  "MERN Stack Developer",
+  "Full Stack Developer",
+  "Frontend Developer",
+  "Backend Developer",
+  "Python Developer",
+  "React Developer",
+  "Node.js Developer",
+  "DevOps Engineer",
+  "Software Engineer",
+  "Data Analyst"
+];
+
+function RoleResumeManager() {
+  const roleResumes = useS((s) => s.roleResumes);
+  const [file, setFile] = useState<File | null>(null);
+  const [role, setRole] = useState("");
+  const [isDefault, setIsDefault] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [cloudStatus, setCloudStatus] = useState<{ cloudinaryConfigured: boolean } | null>(null);
+
+  useEffect(() => {
+    fetchRoleResumes();
+    api.get("/role-resumes/status")
+      .then((res) => setCloudStatus(res.data))
+      .catch(() => setCloudStatus({ cloudinaryConfigured: false }));
+  }, []);
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!file) return toast("Select a resume file to upload", "err");
+    if (!role.trim()) return toast("Enter or select a target job role", "err");
+
+    setUploading(true);
+    try {
+      await uploadRoleResume(file, role.trim(), isDefault, notes.trim());
+      setFile(null);
+      setRole("");
+      setIsDefault(false);
+      setNotes("");
+      const fileInput = document.getElementById("resume-file-input") as HTMLInputElement;
+      if (fileInput) fileInput.value = "";
+    } catch {
+      // toast shown in store
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const roles = ["all", ...Array.from(new Set(roleResumes.map((r) => r.role)))];
+  const filtered = roleFilter === "all" ? roleResumes : roleResumes.filter((r) => r.role === roleFilter);
+
+  const formatSize = (bytes: number) => {
+    if (!bytes) return "0 KB";
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const openResume = (r: RoleResume) => {
+    if (r.storageType === "cloudinary" && r.url && r.url.startsWith("http")) {
+      window.open(r.url, "_blank");
+    } else {
+      const url = `${getApiBaseUrl()}/role-resumes/${r.id}/file?token=${tokens.access || ""}`;
+      window.open(url, "_blank");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Upload Box */}
+      <div className="card space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+          <div>
+            <h2 className="text-base font-semibold">Upload Role-Specific Resume</h2>
+            <p className="text-xs text-slate-500">
+              Upload custom resumes tailored to specific job roles (e.g. MERN Stack Developer, Frontend, Python Backend).
+            </p>
+          </div>
+          {cloudStatus && (
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                cloudStatus.cloudinaryConfigured
+                  ? "bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+              }`}
+            >
+              <Cloud size={13} />
+              {cloudStatus.cloudinaryConfigured ? "Cloudinary Storage Connected" : "Local Database Storage Active"}
+            </span>
+          )}
+        </div>
+
+        <form onSubmit={handleUpload} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="label">Target Job Role *</label>
+              <input
+                className="input"
+                placeholder="e.g. MERN Stack Developer, Frontend Engineer"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                required
+              />
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className="text-[11px] text-slate-400 self-center mr-1">Suggestions:</span>
+                {SUGGESTED_ROLES.slice(0, 5).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRole(r)}
+                    className="rounded-md border border-slate-200 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Resume File (PDF, DOCX, DOC) *</label>
+              <input
+                id="resume-file-input"
+                type="file"
+                className="input file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 dark:file:bg-indigo-950 dark:file:text-indigo-300"
+                accept=".pdf,.docx,.doc"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                required
+              />
+              {file && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Selected: {file.name} ({formatSize(file.size)})
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="label">Notes / Tags (optional)</label>
+              <input
+                className="input"
+                placeholder="e.g. 2+ Yrs Experience, Includes React + Node.js projects"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center pt-2 md:pt-5">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isDefault}
+                  onChange={(e) => setIsDefault(e.target.checked)}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="font-medium text-slate-700 dark:text-slate-300 text-xs">
+                  Set as primary/default resume for this role
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button type="submit" className="btn" disabled={uploading}>
+              {uploading ? "Uploading..." : "Upload Resume"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Uploaded Resumes List */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-lg">Uploaded Resumes ({roleResumes.length})</h3>
+          </div>
+          {roles.length > 1 && (
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {roles.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRoleFilter(r)}
+                  className={`rounded-full px-3 py-1 text-xs capitalize shrink-0 font-medium transition-colors ${
+                    roleFilter === r
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300"
+                  }`}
+                >
+                  {r === "all" ? "All Roles" : r}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="card text-center py-10 text-slate-500 space-y-1">
+            <FileText size={32} className="mx-auto text-slate-400 mb-2" />
+            <p className="font-medium">No resumes uploaded yet.</p>
+            <p className="text-xs">Upload your role-specific resumes above to use them when applying to jobs.</p>
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {filtered.map((r) => (
+              <div
+                key={r.id}
+                className={`card flex flex-col justify-between space-y-3 p-4 transition-all hover:border-slate-300 dark:hover:border-slate-700 ${
+                  r.isDefault ? "ring-1 ring-indigo-500/50 bg-indigo-50/20 dark:bg-indigo-950/20" : ""
+                }`}
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                      {r.role}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {r.isDefault && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded-full">
+                          <Star size={11} className="fill-amber-500" /> Default
+                        </span>
+                      )}
+                      <span className="text-[11px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                        {r.storageType === "cloudinary" ? "Cloudinary" : "Database"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <FileText size={18} className="text-indigo-600 shrink-0" />
+                    <div className="font-medium text-sm truncate" title={r.filename}>
+                      {r.filename}
+                    </div>
+                  </div>
+
+                  <div className="mt-1.5 flex items-center gap-3 text-xs text-slate-500">
+                    <span>{formatSize(r.sizeBytes)}</span>
+                    <span>·</span>
+                    <span>{new Date(r.createdAt).toLocaleDateString()}</span>
+                  </div>
+
+                  {r.notes && (
+                    <p className="mt-2 text-xs text-slate-600 dark:text-slate-400 italic">
+                      "{r.notes}"
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between border-t border-slate-100 pt-3 dark:border-slate-800 text-xs">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openResume(r)}
+                      className="btn-ghost py-1 px-2.5 inline-flex items-center gap-1"
+                    >
+                      <ExternalLink size={13} /> View / Download
+                    </button>
+                    {!r.isDefault && (
+                      <button
+                        onClick={() => setDefaultRoleResume(r.id)}
+                        className="btn-ghost py-1 px-2.5 text-slate-600 hover:text-slate-900"
+                        title="Make this the default resume when applying for this role"
+                      >
+                        Make Default
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete resume "${r.filename}" for ${r.role}?`)) {
+                        deleteRoleResume(r.id);
+                      }
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors rounded"
+                    title="Delete resume"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ResumeBuilder() {
   const p = useS((s) => s.profile);
   const resumes = useS((s) => s.resumes);
-  const [tab, setTab] = useState("Tailor from JD");
+  const [tab, setTab] = useState("Resumes by Role");
   const [jd, setJd] = useState("");
   const [r, setR] = useState<Result | null>(null);
   const [loading, setLoading] = useState(false);
@@ -250,10 +553,15 @@ export default function ResumeBuilder() {
   };
 
   return (
-    <Page title="Resume Builder">
-      <Tabs tabs={["Tailor from JD", "Master profile", "Versions"]} value={tab} onChange={setTab} />
+    <Page title="Resume Hub">
+      <Tabs
+        tabs={["Resumes by Role", "Master profile", "Tailor from JD", "Saved versions"]}
+        value={tab}
+        onChange={setTab}
+      />
+      {tab === "Resumes by Role" && <RoleResumeManager />}
       {tab === "Master profile" && <ProfileEditor />}
-      {tab === "Versions" && (
+      {tab === "Saved versions" && (
         <div className="card space-y-2">
           {resumes.length === 0 ? (
             <p className="text-sm text-slate-500">No saved versions yet.</p>

@@ -14,6 +14,21 @@ export interface Profile { name: string; email: string; headline: string; skills
 export interface Prefs { tone: "formal" | "friendly" | "concise"; provider: "openai" | "gemini"; fallback: boolean; dailyCap: number; delaySec: number; dnc: string[]; signature: string }
 export interface Toast { id: string; msg: string; type: "ok" | "err" }
 export interface ResumeVersion { id: string; label: string; at: string; ats: number; text: string }
+export interface RoleResume {
+  id: string;
+  role: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  url: string;
+  storageType: "cloudinary" | "local";
+  cloudinaryPublicId?: string;
+  attachmentId?: string;
+  isDefault: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface Draft { to: string; subject: string; body: string }
 
 export interface S {
@@ -28,6 +43,7 @@ export interface S {
   toasts: Toast[];
   dark: boolean;
   resumes: ResumeVersion[];
+  roleResumes: RoleResume[];
   draft: Draft | null;
 }
 
@@ -39,6 +55,7 @@ const emptyState = (): S => ({
   draft: null,
   toasts: [],
   resumes: [],
+  roleResumes: [],
   contacts: [],
   threads: [],
   templates: [],
@@ -120,7 +137,7 @@ export function logout() {
 export async function loadInitialData() {
   if (isMockMode() || !tokens.access) return;
   try {
-    const [meRes, contactsRes, threadsRes, tplsRes, appsRes, accsRes, profRes, settingsRes, resumesRes] = await Promise.allSettled([
+    const [meRes, contactsRes, threadsRes, tplsRes, appsRes, accsRes, profRes, settingsRes, resumesRes, roleResumesRes] = await Promise.allSettled([
       api.get("/auth/me"),
       api.get("/contacts"),
       api.get("/threads"),
@@ -130,6 +147,7 @@ export async function loadInitialData() {
       api.get("/profile"),
       api.get("/settings"),
       api.get("/ai/resumes"),
+      api.get("/role-resumes"),
     ]);
 
     set((s) => ({
@@ -142,6 +160,7 @@ export async function loadInitialData() {
       profile: profRes.status === "fulfilled" ? profRes.value.data : s.profile,
       prefs: settingsRes.status === "fulfilled" ? settingsRes.value.data : s.prefs,
       resumes: resumesRes.status === "fulfilled" ? resumesRes.value.data : s.resumes,
+      roleResumes: roleResumesRes.status === "fulfilled" ? roleResumesRes.value.data : s.roleResumes,
     }));
 
     setupSSE();
@@ -486,5 +505,76 @@ export async function setDefaultMailbox(accountId: string) {
       await api.patch(`/accounts/${accountId}/default`);
       toast("Default mailbox updated");
     } catch {}
+  }
+}
+
+// --- Role-Based Resumes Actions ---
+export async function uploadRoleResume(file: File, role: string, isDefault = false, notes = ""): Promise<RoleResume> {
+  toast(`Uploading ${file.name} for ${role}...`);
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("role", role);
+  formData.append("is_default", String(isDefault));
+  if (notes) formData.append("notes", notes);
+
+  try {
+    const res = await api.post("/role-resumes/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
+    const newDoc: RoleResume = res.data;
+    set((s) => ({
+      roleResumes: [
+        newDoc,
+        ...s.roleResumes.filter((r) => r.id !== newDoc.id).map((r) =>
+          isDefault && r.role.toLowerCase() === role.toLowerCase() ? { ...r, isDefault: false } : r
+        )
+      ]
+    }));
+    toast(`Resume uploaded for ${role}!`);
+    return newDoc;
+  } catch (err: any) {
+    const msg = err.response?.data?.error?.message || err.response?.data?.detail || "Upload failed";
+    toast(msg, "err");
+    throw err;
+  }
+}
+
+export async function deleteRoleResume(id: string) {
+  try {
+    await api.delete(`/role-resumes/${id}`);
+    set((s) => ({
+      roleResumes: s.roleResumes.filter((r) => r.id !== id)
+    }));
+    toast("Resume deleted");
+  } catch (err: any) {
+    toast(err.response?.data?.error?.message || "Failed to delete resume", "err");
+  }
+}
+
+export async function setDefaultRoleResume(id: string) {
+  try {
+    await api.patch(`/role-resumes/${id}/default`);
+    set((s) => {
+      const target = s.roleResumes.find((x) => x.id === id);
+      return {
+        roleResumes: s.roleResumes.map((r) => {
+          if (r.id === id) return { ...r, isDefault: true };
+          if (target && r.role.toLowerCase() === target.role.toLowerCase()) return { ...r, isDefault: false };
+          return r;
+        })
+      };
+    });
+    toast("Default resume updated for this role");
+  } catch (err: any) {
+    toast(err.response?.data?.error?.message || "Failed to set default", "err");
+  }
+}
+
+export async function fetchRoleResumes() {
+  try {
+    const res = await api.get("/role-resumes");
+    set(() => ({ roleResumes: res.data }));
+  } catch (err) {
+    console.warn("Failed fetching role resumes", err);
   }
 }
