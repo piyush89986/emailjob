@@ -772,7 +772,9 @@ export async function uploadJobPoster(file: File, autoAnalyze = false): Promise<
     const res = await api.post("/apply/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" }
     });
-    const poster: JobPoster = res.data;
+    const raw = res.data;
+    const posterId = raw.id || raw._id || "poster";
+    const poster: JobPoster = { ...raw, id: posterId };
     set((s) => ({ posters: [poster, ...s.posters.filter((p) => p.id !== poster.id)] }));
     toast(autoAnalyze ? "Job poster uploaded & analyzed!" : "Job poster uploaded!");
     return poster;
@@ -784,11 +786,13 @@ export async function uploadJobPoster(file: File, autoAnalyze = false): Promise<
 }
 
 export async function analyzeJobPoster(id: string): Promise<JobPoster> {
+  const safeId = id || "current";
   try {
-    const res = await api.post(`/apply/jobs/${id}/analyze`);
-    const updated: JobPoster = res.data;
+    const res = await api.post(`/apply/jobs/${safeId}/analyze`);
+    const raw = res.data;
+    const updated: JobPoster = { ...raw, id: raw.id || raw._id || safeId };
     set((s) => ({
-      posters: s.posters.map((p) => (p.id === id ? updated : p))
+      posters: s.posters.map((p) => (p.id === safeId ? updated : p))
     }));
     toast("Job poster analyzed successfully!");
     return updated;
@@ -800,11 +804,12 @@ export async function analyzeJobPoster(id: string): Promise<JobPoster> {
 }
 
 export async function generateJdForPoster(id: string, extractedData?: ExtractedJobDetails) {
+  const safeId = id || "current";
   try {
-    const res = await api.post(`/apply/jobs/${id}/generate-jd`, { extracted_data: extractedData });
+    const res = await api.post(`/apply/jobs/${safeId}/generate-jd`, { extracted_data: extractedData });
     const jd: string = res.data.generated_jd;
     set((s) => ({
-      posters: s.posters.map((p) => (p.id === id ? { ...p, generated_jd: jd } : p))
+      posters: s.posters.map((p) => (p.id === safeId ? { ...p, generated_jd: jd } : p))
     }));
     toast("Job description generated!");
     return jd;
@@ -815,8 +820,9 @@ export async function generateJdForPoster(id: string, extractedData?: ExtractedJ
 }
 
 export async function matchResumesForPoster(id: string, extractedData?: ExtractedJobDetails): Promise<ResumeMatchScore[]> {
+  const safeId = id || "current";
   try {
-    const res = await api.post(`/apply/jobs/${id}/match-resume`, { extracted_data: extractedData });
+    const res = await api.post(`/apply/jobs/${safeId}/match-resume`, { extracted_data: extractedData });
     return res.data.matches || [];
   } catch (err: any) {
     toast(err.response?.data?.detail || "Failed matching resumes", "err");
@@ -825,8 +831,9 @@ export async function matchResumesForPoster(id: string, extractedData?: Extracte
 }
 
 export async function generateEmailForPoster(id: string, params: { extractedData?: ExtractedJobDetails; resumeId?: string; tone?: string }) {
+  const safeId = id || "current";
   try {
-    const res = await api.post(`/apply/jobs/${id}/generate-email`, {
+    const res = await api.post(`/apply/jobs/${safeId}/generate-email`, {
       extracted_data: params.extractedData,
       resume_id: params.resumeId,
       tone: params.tone || "formal"
@@ -846,8 +853,9 @@ export async function sendPosterApplication(id: string, payload: {
   extractedData?: ExtractedJobDetails;
   generatedJd?: string;
 }) {
+  const safeId = id || "current";
   try {
-    const res = await api.post(`/apply/jobs/${id}/send`, {
+    const res = await api.post(`/apply/jobs/${safeId}/send`, {
       to_email: payload.toEmail,
       subject: payload.subject,
       body_html: payload.bodyHtml,

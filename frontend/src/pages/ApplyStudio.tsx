@@ -429,6 +429,9 @@ export default function ApplyStudio() {
   const [pipelineSkills, setPipelineSkills] = useState<SkillStatus[]>(INITIAL_PIPELINE_SKILLS);
   const [pipelineLogs, setPipelineLogs] = useState<PipelineLog[]>([]);
 
+  // Execution Mode (Syn: Synchronous vs Asyn: Asynchronous)
+  const [executionMode, setExecutionMode] = useState<"syn" | "asyn">(() => (localStorage.getItem("jobmail_exec_mode") as any) || "syn");
+
   // Upload dropzone state
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -774,7 +777,11 @@ export default function ApplyStudio() {
       setPipelineSkills((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
     };
 
-    log("info", "System", `Starting automation pipeline for "${selectedFile.name}" in ${workflowMode === "auto" ? "Automatic Mode" : "Manual Review Mode"}`);
+    log(
+      "info",
+      "System",
+      `Starting automation pipeline for "${selectedFile.name}" in ${workflowMode === "auto" ? "Automatic Mode" : "Manual Review Mode"} [${executionMode.toUpperCase()}]`
+    );
     setIsUploading(true);
 
     try {
@@ -851,31 +858,65 @@ export default function ApplyStudio() {
 
       if (isCancelledRef.current) return;
 
-      // --- SKILL 2: Job Description Generator ---
-      updateSkill("skill-jd", { status: "running", message: "Synthesizing structured Markdown JD..." });
-      log("info", "JD Generator", "Formatting job responsibilities, skills, and qualifications into Markdown JD...");
-
-      const jdText = poster.generated_jd || (extracted.job_responsibilities?.length ? extracted.job_responsibilities.join("\n") : "Standard job description generated.");
-      setEditableJd(jdText);
-      updateSkill("skill-jd", {
-        status: "completed",
-        message: "Structured Job Description generated successfully",
-        details: `${jdText.length} characters structured`
-      });
-      log("success", "JD Generator", "Markdown Job Description ready for resume matching.");
-
-      if (isCancelledRef.current) return;
-
-      // --- SKILL 3: AI Resume Matcher & Scorer ---
-      updateSkill("skill-resume", { status: "running", message: "Matching candidate resumes with extracted job criteria..." });
-      log("info", "Resume Matcher", `Evaluating fit against stored role resumes in Resume Builder...`);
-
+      let jdText = "";
       let matchedResumes: ResumeMatchScore[] = [];
-      try {
-        matchedResumes = await matchResumesForPoster(poster.id, extracted);
-        setResumeMatches(matchedResumes);
-      } catch (err: any) {
-        log("warning", "Resume Matcher", `Resume matching warning: ${err.message || "Using fallback"}`);
+
+      if (executionMode === "asyn") {
+        // ASYNCHRONOUS MODE: Run JD Generator and Resume Matcher concurrently
+        log("info", "System", "⚡ Asyn Mode: Running JD Generator & Resume Fit Scoring concurrently...");
+        updateSkill("skill-jd", { status: "running", message: "Synthesizing structured Markdown JD (Asyn)..." });
+        updateSkill("skill-resume", { status: "running", message: "Evaluating fit against stored role resumes (Asyn)..." });
+
+        const [jdResult, resumeResult] = await Promise.allSettled([
+          (async () => {
+            const text = poster.generated_jd || (extracted.job_responsibilities?.length ? extracted.job_responsibilities.join("\n") : "Standard job description generated.");
+            setEditableJd(text);
+            return text;
+          })(),
+          matchResumesForPoster(poster.id, extracted)
+        ]);
+
+        jdText = jdResult.status === "fulfilled" ? jdResult.value : (poster.generated_jd || "Standard job description generated.");
+        updateSkill("skill-jd", {
+          status: "completed",
+          message: "Structured Job Description generated successfully",
+          details: `${jdText.length} characters structured`
+        });
+        log("success", "JD Generator", "Markdown Job Description ready for resume matching.");
+
+        if (resumeResult.status === "fulfilled") {
+          matchedResumes = resumeResult.value;
+          setResumeMatches(matchedResumes);
+        } else {
+          log("warning", "Resume Matcher", "Asyn resume matching notice.");
+        }
+      } else {
+        // SYNCHRONOUS MODE: Step-by-step sequential execution
+        // --- SKILL 2: Job Description Generator ---
+        updateSkill("skill-jd", { status: "running", message: "Synthesizing structured Markdown JD..." });
+        log("info", "JD Generator", "Formatting job responsibilities, skills, and qualifications into Markdown JD...");
+
+        jdText = poster.generated_jd || (extracted.job_responsibilities?.length ? extracted.job_responsibilities.join("\n") : "Standard job description generated.");
+        setEditableJd(jdText);
+        updateSkill("skill-jd", {
+          status: "completed",
+          message: "Structured Job Description generated successfully",
+          details: `${jdText.length} characters structured`
+        });
+        log("success", "JD Generator", "Markdown Job Description ready for resume matching.");
+
+        if (isCancelledRef.current) return;
+
+        // --- SKILL 3: AI Resume Matcher & Scorer ---
+        updateSkill("skill-resume", { status: "running", message: "Matching candidate resumes with extracted job criteria..." });
+        log("info", "Resume Matcher", `Evaluating fit against stored role resumes in Resume Builder...`);
+
+        try {
+          matchedResumes = await matchResumesForPoster(poster.id, extracted);
+          setResumeMatches(matchedResumes);
+        } catch (err: any) {
+          log("warning", "Resume Matcher", `Resume matching warning: ${err.message || "Using fallback"}`);
+        }
       }
 
       if (isCancelledRef.current) return;
@@ -905,7 +946,7 @@ export default function ApplyStudio() {
       log("info", "Safety Gate", "Validating recipient HR email and match score threshold (>= 75%)...");
 
       const hasHrEmail = Boolean(extracted.hr_email && extracted.hr_email.includes("@"));
-      const matchScore = bestMatch ? bestMatch.match_percentage : 70;
+      const matchScore = bestMatch ? bestMatch.match_percentage : (extracted.required_skills?.length > 0 ? 70 : 50);
       let gateHasIssue = false;
 
       if (!hasHrEmail) {
@@ -917,12 +958,14 @@ export default function ApplyStudio() {
         });
         log("warning", "Safety Gate", "Dikkat: Recruiter HR email missing from poster.");
       } else if (matchScore < 75) {
+        gateHasIssue = true; // Hold auto-dispatch for low match score!
         updateSkill("skill-gate", {
           status: "warning",
           message: `Match score ${matchScore}% is below standard 75% threshold`,
-          details: `HR email verified: ${extracted.hr_email}`
+          details: `HR email verified: ${extracted.hr_email}`,
+          error: `Dikkat: Match score (${matchScore}%) minimum 75% threshold se kam hai. Manual verification zaroori hai.`
         });
-        log("warning", "Safety Gate", `Notice: Match score ${matchScore}% below 75% threshold.`);
+        log("warning", "Safety Gate", `Dikkat: Match score ${matchScore}% below 75% threshold. Auto-send held for safety.`);
       } else {
         updateSkill("skill-gate", {
           status: "completed",
@@ -955,12 +998,13 @@ export default function ApplyStudio() {
         });
         log("success", "Email Drafter", `Email draft generated: '${emailDraft.subject}'`);
       } catch (err: any) {
+        gateHasIssue = true; // If drafting fails, do NOT auto-send!
         updateSkill("skill-email", {
           status: "error",
           message: "Failed to generate email draft",
-          error: `Dikkat: ${err.message || "AI email drafting error"}`
+          error: `Dikkat: ${err.response?.data?.detail || err.message || "AI email drafting error"}`
         });
-        log("error", "Email Drafter", `Dikkat in Email Drafter: ${err.message}`);
+        log("error", "Email Drafter", `Dikkat in Email Drafter: ${err.response?.data?.detail || err.message}`);
       }
 
       if (isCancelledRef.current) return;
@@ -968,15 +1012,15 @@ export default function ApplyStudio() {
       // --- SKILL 6 & 7: Gmail Dispatcher & Application Tracker ---
       if (workflowMode === "auto") {
         const recipient = emailDraft?.to_email || extracted.hr_email;
-        if (recipient && !gateHasIssue) {
+        if (recipient && !gateHasIssue && emailDraft && emailDraft.body_html) {
           updateSkill("skill-gmail", { status: "running", message: `Dispatching application to ${recipient} via Gmail API...` });
           log("info", "Gmail Dispatcher", `Connecting to Gmail API and sending email with resume PDF...`);
 
           try {
             await sendPosterApplication(poster.id, {
               toEmail: recipient,
-              subject: emailDraft?.subject || `Application for ${extracted.job_title}`,
-              bodyHtml: emailDraft?.body_html || "",
+              subject: emailDraft.subject || `Application for ${extracted.job_title}`,
+              bodyHtml: emailDraft.body_html,
               resumeId: bestMatch?.resume_id,
               extractedData: extracted,
               generatedJd: poster.generated_jd
@@ -1009,19 +1053,28 @@ export default function ApplyStudio() {
             setLivePipelineStatus("error");
           }
         } else {
-          // Automatic mode paused because HR email is missing
+          // Automatic mode paused because requirements not met
+          let pauseReason = "Recruiter HR email missing";
+          if (!hasHrEmail) {
+            pauseReason = "Recruiter HR email nahi mila";
+          } else if (matchScore < 75) {
+            pauseReason = `Resume fit score (${matchScore}%) threshold (75%) se kam hai`;
+          } else if (!emailDraft || !emailDraft.body_html) {
+            pauseReason = "Cold email draft ready nahi ho paya";
+          }
+
           updateSkill("skill-gmail", {
             status: "warning",
-            message: "Auto-send paused: Recruiter HR email missing",
-            error: "Dikkat: Gmail Dispatcher auto-send nahi kar saka kyunki HR email nahi mila."
+            message: `Auto-send paused: ${pauseReason}`,
+            error: `Dikkat: Auto-send rok diya gaya (${pauseReason}). Review in Studio.`
           });
           updateSkill("skill-tracker", {
             status: "idle",
             message: "Pending manual approval and recipient verification"
           });
           setLivePipelineStatus("attention_needed");
-          log("warning", "System", "Dikkat: Recruiter HR email missing. Auto-send paused for manual input.");
-          toast("HR email not detected on poster. Please review recipient email.", "err");
+          log("warning", "System", `Dikkat: Auto-send paused: ${pauseReason}. Review in Studio.`);
+          toast(`Auto-send paused: ${pauseReason}`, "err");
         }
       } else {
         // MANUAL MODE
@@ -1475,8 +1528,44 @@ export default function ApplyStudio() {
       {/* --- TAB 2: VISUAL WORKFLOW BUILDER --- */}
       {activeTab === "builder" && (
         <div className="space-y-3">
-          {/* Action Toolbar: Only Add Node, Save, Test Run */}
+          {/* Action Toolbar: Syn/Asyn Toggle, Add Node, Save, Test Run, Logs */}
           <div className="flex items-center justify-end gap-2.5">
+            {/* Syn / Asyn Toggle - Compact, no big text! */}
+            <div className="inline-flex rounded-lg bg-slate-200 dark:bg-slate-800 p-0.5 text-xs font-semibold shadow-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setExecutionMode("syn");
+                  localStorage.setItem("jobmail_exec_mode", "syn");
+                  toast("Mode: Syn");
+                }}
+                className={`px-2.5 py-1 rounded-md transition-all text-xs cursor-pointer ${
+                  executionMode === "syn"
+                    ? "bg-white text-indigo-600 dark:bg-slate-700 dark:text-white shadow-xs font-bold"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium"
+                }`}
+                title="Synchronous execution"
+              >
+                syn
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExecutionMode("asyn");
+                  localStorage.setItem("jobmail_exec_mode", "asyn");
+                  toast("Mode: Asyn");
+                }}
+                className={`px-2.5 py-1 rounded-md transition-all text-xs cursor-pointer ${
+                  executionMode === "asyn"
+                    ? "bg-white text-indigo-600 dark:bg-slate-700 dark:text-white shadow-xs font-bold"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium"
+                }`}
+                title="Asynchronous execution"
+              >
+                asyn
+              </button>
+            </div>
+
             <button
               onClick={() => setDrawerMode("add")}
               className="btn text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 shadow-xs"

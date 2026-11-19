@@ -50,6 +50,26 @@ class SendApplicationRequest(BaseModel):
     generated_jd: Optional[str] = None
 
 
+async def _get_poster(poster_id: str, tenant_id: str) -> Optional[JobPoster]:
+    """Helper to locate a JobPoster by id with support for string uuid, Beanie id, and ObjectId."""
+    if not poster_id or poster_id in ("undefined", "null", "none"):
+        return None
+    poster = await JobPoster.find_one(JobPoster.id == poster_id, JobPoster.tenant_id == tenant_id)
+    if not poster:
+        try:
+            from bson import ObjectId
+            if ObjectId.is_valid(poster_id):
+                poster = await JobPoster.find_one({"_id": ObjectId(poster_id), "tenant_id": tenant_id})
+        except Exception:
+            pass
+    if not poster:
+        try:
+            poster = await JobPoster.find_one({"_id": poster_id, "tenant_id": tenant_id})
+        except Exception:
+            pass
+    return poster
+
+
 @router.get("/metrics")
 async def get_apply_studio_metrics(user: User = Depends(get_current_user)):
     """Fetch high-level overview metrics for Apply Studio dashboard."""
@@ -155,7 +175,10 @@ async def upload_job_poster(
             log.error("auto_analyze_job_poster_failed", error=str(e))
 
     await poster.save()
-    return poster
+    resp_dict = poster.model_dump()
+    resp_dict["id"] = poster.id
+    resp_dict["_id"] = str(poster.id)
+    return resp_dict
 
 
 @router.get("/jobs")
@@ -193,7 +216,7 @@ async def list_job_posters(
 @router.get("/jobs/{poster_id}")
 async def get_job_poster(poster_id: str, user: User = Depends(get_current_user)):
     """Fetch single job poster details."""
-    poster = await JobPoster.find_one(JobPoster.id == poster_id, JobPoster.tenant_id == user.tenant_id)
+    poster = await _get_poster(poster_id, user.tenant_id)
     if not poster:
         raise NotFoundError("Job poster not found")
     return poster
@@ -202,7 +225,7 @@ async def get_job_poster(poster_id: str, user: User = Depends(get_current_user))
 @router.post("/jobs/{poster_id}/analyze")
 async def analyze_job_poster(poster_id: str, user: User = Depends(get_current_user)):
     """Run AI Vision analysis on an existing uploaded job poster."""
-    poster = await JobPoster.find_one(JobPoster.id == poster_id, JobPoster.tenant_id == user.tenant_id)
+    poster = await _get_poster(poster_id, user.tenant_id)
     if not poster:
         raise NotFoundError("Job poster not found")
 
@@ -245,18 +268,25 @@ async def generate_jd_endpoint(
     user: User = Depends(get_current_user)
 ):
     """Generate or regenerate structured Job Description."""
-    poster = await JobPoster.find_one(JobPoster.id == poster_id, JobPoster.tenant_id == user.tenant_id)
-    if not poster:
-        raise NotFoundError("Job poster not found")
+    poster = await _get_poster(poster_id, user.tenant_id)
 
-    details = ExtractedJobDetails(**req.extracted_data) if req.extracted_data else poster.extracted_data
+    details = None
+    if req.extracted_data:
+        try:
+            details = ExtractedJobDetails(**req.extracted_data)
+        except Exception:
+            pass
+    if not details and poster:
+        details = poster.extracted_data
+
     if not details:
         raise AppError("No job details available to generate JD", status_code=400)
 
     jd_text = JobPosterAnalyzer.generate_structured_jd(details)
-    poster.generated_jd = jd_text
-    poster.updated_at = datetime.now(timezone.utc)
-    await poster.save()
+    if poster:
+        poster.generated_jd = jd_text
+        poster.updated_at = datetime.now(timezone.utc)
+        await poster.save()
     return {"generated_jd": jd_text}
 
 
@@ -267,11 +297,17 @@ async def match_resume_endpoint(
     user: User = Depends(get_current_user)
 ):
     """Run weighted scoring algorithm against all candidate's uploaded role resumes."""
-    poster = await JobPoster.find_one(JobPoster.id == poster_id, JobPoster.tenant_id == user.tenant_id)
-    if not poster:
-        raise NotFoundError("Job poster not found")
+    poster = await _get_poster(poster_id, user.tenant_id)
 
-    details = ExtractedJobDetails(**req.extracted_data) if req.extracted_data else poster.extracted_data
+    details = None
+    if req.extracted_data:
+        try:
+            details = ExtractedJobDetails(**req.extracted_data)
+        except Exception:
+            pass
+    if not details and poster:
+        details = poster.extracted_data
+
     if not details:
         raise AppError("Job details not extracted yet", status_code=400)
 
@@ -294,11 +330,17 @@ async def generate_email_endpoint(
     user: User = Depends(get_current_user)
 ):
     """Generate personalized application email draft."""
-    poster = await JobPoster.find_one(JobPoster.id == poster_id, JobPoster.tenant_id == user.tenant_id)
-    if not poster:
-        raise NotFoundError("Job poster not found")
+    poster = await _get_poster(poster_id, user.tenant_id)
 
-    details = ExtractedJobDetails(**req.extracted_data) if req.extracted_data else poster.extracted_data
+    details = None
+    if req.extracted_data:
+        try:
+            details = ExtractedJobDetails(**req.extracted_data)
+        except Exception:
+            pass
+    if not details and poster:
+        details = poster.extracted_data
+
     if not details:
         raise AppError("Job details not extracted", status_code=400)
 
@@ -365,7 +407,7 @@ async def send_application_endpoint(
     )
 
     # Save to Application Tracker
-    poster = await JobPoster.find_one(JobPoster.id == poster_id, JobPoster.tenant_id == tenant_id)
+    poster = await _get_poster(poster_id, tenant_id)
     app_record = Application(
         tenant_id=tenant_id,
         title=req.extracted_data.get("job_title", "Open Role") if req.extracted_data else (poster.extracted_data.job_title if poster and poster.extracted_data else "Open Role"),
