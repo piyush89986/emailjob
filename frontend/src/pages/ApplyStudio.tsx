@@ -188,13 +188,6 @@ function CustomWorkflowNode({ data, id, selected }: { data: any; id: string; sel
           {data.description || "Processes workflow payload and passes to next step."}
         </p>
 
-        {data.threshold !== undefined && Number(data.threshold) > 0 && (
-          <div className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 px-2.5 py-1 text-[11px] font-medium text-amber-800 dark:text-amber-300">
-            <span>Pass Threshold</span>
-            <span className="font-bold font-mono">≥ {data.threshold}%</span>
-          </div>
-        )}
-
         {isEmail && (
           <div className="rounded-lg bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 p-2 space-y-1">
             <div className="flex items-center justify-between text-[11px] font-semibold text-indigo-950 dark:text-indigo-200">
@@ -314,10 +307,9 @@ const WORKFLOW_STEP_PRESETS = [
     categoryBadge: "Logic / Filter",
     icon: <ShieldCheck size={18} />,
     iconBg: "bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400",
-    description: "Branches execution: routes low-scoring applications to manual review.",
+    description: "Branches execution: validates recruiter HR email before sending.",
     extra: {
-      description: "Verifies recipient HR email presence (Threshold disabled by default).",
-      threshold: 0,
+      description: "Verifies recipient HR email presence before proceeding.",
     },
   },
   {
@@ -528,7 +520,6 @@ export default function ApplyStudio() {
   const [editFormData, setEditFormData] = useState<{
     label: string;
     description: string;
-    threshold?: number;
     tone?: string;
     subjectTemplate?: string;
     model?: string;
@@ -537,7 +528,6 @@ export default function ApplyStudio() {
   }>({
     label: "",
     description: "",
-    threshold: 0,
     tone: "formal",
     subjectTemplate: "Application for {{role}} – {{my_name}}",
     model: "gpt-4o-mini",
@@ -616,7 +606,6 @@ export default function ApplyStudio() {
     setEditFormData({
       label: String(node.data?.label || "Workflow Step"),
       description: String(node.data?.description || ""),
-      threshold: typeof node.data?.threshold === "number" ? node.data.threshold : 0,
       tone: String(node.data?.tone || "formal"),
       subjectTemplate: String(node.data?.subjectTemplate || "Application for {{role}} – {{my_name}}"),
       model: String(node.data?.model || "gpt-4o-mini"),
@@ -638,7 +627,6 @@ export default function ApplyStudio() {
               ...n.data,
               label: editFormData.label,
               description: editFormData.description,
-              ...(editFormData.threshold !== undefined ? { threshold: editFormData.threshold } : {}),
               ...(editFormData.tone ? { tone: editFormData.tone } : {}),
               ...(editFormData.subjectTemplate ? { subjectTemplate: editFormData.subjectTemplate } : {}),
               ...(editFormData.model ? { model: editFormData.model } : {}),
@@ -1020,23 +1008,11 @@ export default function ApplyStudio() {
       const hasHrEmail = Boolean(extracted.hr_email && extracted.hr_email.includes("@"));
       const matchScore = bestMatch ? bestMatch.match_percentage : (extracted.required_skills?.length > 0 ? 70 : 50);
 
-      // Check if user explicitly configured a custom threshold (> 0). Default is 0 / disabled.
-      const explicitThreshold = selectedWorkflow?.settings?.min_match_score || 0;
-
       if (!hasHrEmail) {
         const ok = handleStepFailure(
           "skill-gate",
           "Safety Gate",
           "Recruiter HR email missing from poster",
-          ["skill-email", "skill-gmail", "skill-tracker"]
-        );
-        if (!ok) return;
-      } else if (explicitThreshold > 0 && matchScore < explicitThreshold) {
-        // Only checked if explicitly set by user!
-        const ok = handleStepFailure(
-          "skill-gate",
-          "Safety Gate",
-          `Match score (${matchScore}%) is below custom configured threshold of ${explicitThreshold}%`,
           ["skill-email", "skill-gmail", "skill-tracker"]
         );
         if (!ok) return;
@@ -2010,65 +1986,18 @@ export default function ApplyStudio() {
                     </div>
                   </div>
 
-                  {/* Condition: Optional Threshold (Disabled by default; only enforced if user explicitly enables it) */}
-                  {(selectedNode.data?.category === "condition" || selectedNode.type === "condition" || editFormData.threshold !== undefined) && (
-                    <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wide flex items-center gap-1.5">
-                          <ShieldCheck size={14} className="text-amber-600 dark:text-amber-400" />
-                          <span>Match Score Threshold</span>
-                        </label>
-                        <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded ${
-                          (editFormData.threshold || 0) > 0
-                            ? "bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100"
-                            : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
-                        }`}>
-                          {(editFormData.threshold || 0) > 0 ? `≥ ${editFormData.threshold}%` : "Disabled (None)"}
+                  {/* Condition / Safety Gate Info */}
+                  {(selectedNode.data?.category === "condition" || selectedNode.type === "condition") && (
+                    <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck size={16} className="text-emerald-600 dark:text-emerald-400" />
+                        <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 uppercase tracking-wide">
+                          Safety Gate Verification
                         </span>
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id="enforce_threshold"
-                          checked={(editFormData.threshold || 0) > 0}
-                          onChange={(e) => {
-                            setEditFormData((prev) => ({
-                              ...prev,
-                              threshold: e.target.checked ? 75 : 0
-                            }));
-                          }}
-                          className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
-                        />
-                        <label htmlFor="enforce_threshold" className="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
-                          Enforce minimum match threshold before applying
-                        </label>
-                      </div>
-
-                      {(editFormData.threshold || 0) > 0 && (
-                        <div className="space-y-1.5 pt-1">
-                          <input
-                            type="range"
-                            min="30"
-                            max="95"
-                            step="5"
-                            className="w-full accent-amber-600 h-2 bg-amber-200 rounded-lg cursor-pointer dark:bg-amber-800"
-                            value={editFormData.threshold || 75}
-                            onChange={(e) =>
-                              setEditFormData((prev) => ({ ...prev, threshold: parseInt(e.target.value) || 0 }))
-                            }
-                          />
-                          <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
-                            Applications with resume match scores below {editFormData.threshold}% will be halted for review.
-                          </p>
-                        </div>
-                      )}
-
-                      {(!editFormData.threshold || editFormData.threshold === 0) && (
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
-                          Threshold is disabled by default. The best matching resume will be picked automatically without score restrictions.
-                        </p>
-                      )}
+                      <p className="text-[11px] text-emerald-800 dark:text-emerald-300/90 leading-relaxed">
+                        Verifies that a valid recruiter HR email exists before allowing email dispatch. Best resume and matching templates are selected automatically without score restrictions.
+                      </p>
                     </div>
                   )}
 

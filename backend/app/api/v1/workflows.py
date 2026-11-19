@@ -81,7 +81,7 @@ def get_default_workflow_nodes_and_edges():
             "id": "node-5",
             "type": "condition",
             "position": {"x": 1200, "y": 340},
-            "data": {"label": "Safety Gate Check", "category": "condition", "threshold": 0, "description": "Verifies valid recruiter HR email presence"}
+            "data": {"label": "Safety Gate Check", "category": "condition", "description": "Verifies valid recruiter HR email presence"}
         },
         {
             "id": "node-6",

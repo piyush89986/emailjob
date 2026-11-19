@@ -137,7 +137,7 @@ class TemplateMatcher:
     ) -> Tuple[Optional[Template], float]:
         """Find the best matching template for a given role title.
 
-        Returns (Template, score) or (None, 0.0) if no template passes threshold.
+        Returns (Template, score) or (None, 0.0) if no matching template found.
         """
         repo = TemplateRepo(tenant_id)
         templates = await repo.list_for_tenant_with_globals()
@@ -159,8 +159,8 @@ class TemplateMatcher:
                 best_score = score
                 best_tpl = tpl
 
-        # Minimum confidence threshold (0.55 = clear relevance)
-        if best_tpl and best_score >= 0.55:
+        # If a relevant template is matched
+        if best_tpl and best_score > 0:
             return best_tpl, round(best_score, 2)
 
         return None, 0.0

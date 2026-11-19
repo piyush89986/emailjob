@@ -210,16 +210,7 @@ class WorkflowEngine:
                         if not hr_email:
                             raise AppError("HR email is missing from job poster", status_code=400)
 
-                        # Check 2: Match score threshold (ONLY if explicitly configured > 0, disabled by default!)
-                        configured_threshold = node_data.get("threshold")
-                        if configured_threshold is None:
-                            configured_threshold = getattr(workflow.settings, "min_match_score", 0) or 0
-
-                        if configured_threshold and int(configured_threshold) > 0:
-                            if match_score < int(configured_threshold):
-                                raise AppError(f"Match score {match_score}% is below configured threshold of {configured_threshold}%", status_code=400)
-
-                        # Check 3: Duplicate application check
+                        # Check 2: Duplicate application check
                         existing_app = await Application.find_one(
                             Application.tenant_id == tenant_id,
                             Application.hr_email == hr_email

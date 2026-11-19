@@ -140,7 +140,7 @@ export interface AutomationWorkflow {
   nodes: any[];
   edges: any[];
   settings: {
-    min_match_score: number;
+    min_match_score?: number;
     auto_send: boolean;
     fallback_to_manual: boolean;
     delay_between_steps_sec?: number;

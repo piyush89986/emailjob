@@ -66,7 +66,7 @@ async def get_followup_suggestions(
     """Suggest follow-ups for waiting threads older than 5 days. Suggestions only, never auto-sends."""
     all_threads = await thread_repo.find_all()
     now = datetime.now(timezone.utc)
-    threshold = now - timedelta(days=5)
+    cutoff_date = now - timedelta(days=5)
 
     followups: List[FollowupItem] = []
     waiting_count = 0
@@ -81,7 +81,7 @@ async def get_followup_suggestions(
             msg_at = last_msg.at if last_msg else t.updated_at
             if msg_at.tzinfo is None:
                 msg_at = msg_at.replace(tzinfo=timezone.utc)
-            if msg_at < threshold:
+            if msg_at < cutoff_date:
                 contact = await contact_repo.get_by_id(t.contact_id)
                 days_waiting = (now - msg_at).days
                 followups.append(
