@@ -77,6 +77,12 @@ class SyncService:
         if not p_mid:
             return None
 
+        # Basic Gmail Filtering: Exclude promotional, social, and forum emails directly (Requirement 2)
+        label_ids = item.get("label_ids", [])
+        if any(lbl in label_ids for lbl in ["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS"]):
+            log.info("ignoring_promotional_inbound_message", p_mid=p_mid, labels=label_ids)
+            return None
+
         body = item.get("body", "")
 
         msg_repo = MessageRepo(tenant_id)

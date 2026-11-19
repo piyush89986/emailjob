@@ -255,26 +255,27 @@ async def sync_hr_inbox(
             log.warning("manual_sync_account_failed", account_id=acc.id, error=str(e))
 
     # Backfill: check for any existing inbound messages not yet in HRInbox
-    inbound_msgs = await Message.find(Message.tenant_id == user.tenant_id, Message.dir == "in").sort("-at").limit(30).to_list()
+    inbound_msgs = await Message.find(Message.tenant_id == user.tenant_id, Message.dir == "in").sort("-at").limit(100).to_list()
     backfilled_count = 0
     for m in inbound_msgs:
-        if m.provider_message_id:
-            exists = await HRInbox.find_one(HRInbox.user_id == user.id, HRInbox.gmail_message_id == m.provider_message_id)
-            if not exists and accounts:
-                acc = accounts[0]
-                item_dict = {
-                    "provider_message_id": m.provider_message_id,
-                    "from": m.from_addr,
-                    "to": m.to_addrs,
-                    "subject": m.subject,
-                    "body": m.body,
-                    "label_ids": []
-                }
-                try:
-                    await HRClassifierService.process_inbound_email(acc, item_dict, m)
-                    backfilled_count += 1
-                except Exception as ex:
-                    log.warning("backfill_error", mid=m.provider_message_id, error=str(ex))
+        mid = m.provider_message_id or f"msg_{m.id}"
+        exists = await HRInbox.find_one(HRInbox.user_id == user.id, HRInbox.gmail_message_id == mid)
+        if not exists and accounts:
+            acc = accounts[0]
+            item_dict = {
+                "provider_message_id": mid,
+                "provider_thread_id": m.thread_id,
+                "from": m.from_addr,
+                "to": m.to_addrs,
+                "subject": m.subject,
+                "body": m.body,
+                "label_ids": []
+            }
+            try:
+                await HRClassifierService.process_inbound_email(acc, item_dict, m, user_id=user.id)
+                backfilled_count += 1
+            except Exception as ex:
+                log.warning("backfill_error", mid=mid, error=str(ex))
 
     return {
         "status": "ok",

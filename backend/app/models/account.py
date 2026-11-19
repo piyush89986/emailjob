@@ -10,6 +10,7 @@ from pydantic import Field
 class EmailAccount(Document):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     tenant_id: str
+    user_id: Optional[str] = None
     provider: str  # "gmail" | "outlook" | "imap"
     address: str
     encrypted_creds: str  # Fernet encrypted token or credentials JSON

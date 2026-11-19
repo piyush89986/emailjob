@@ -140,9 +140,9 @@ class GmailProvider(EmailProvider):
                             messages.append(msg_detail)
                     return messages, new_cursor
 
-            # Fallback / initial sync
+            # Fallback / initial sync - Strictly exclude promotional, social, and forum emails (Requirement 2)
             resp = await client.get(
-                "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=is:inbox",
+                "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=is:inbox+-category:promotions+-category:social+-category:forums",
                 headers=headers,
                 timeout=15.0
             )
@@ -209,22 +209,36 @@ class GmailProvider(EmailProvider):
         if resp.status_code != 200:
             return None
         data = resp.json()
+        label_ids = data.get("labelIds", [])
+
+        # Basic Gmail Filtering: Exclude promotional, social, and forum emails directly (Requirement 2)
+        if any(lbl in label_ids for lbl in ["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS"]):
+            log.info("ignoring_promotional_or_social_email", mid=mid, labels=label_ids)
+            return None
+
         payload = data.get("payload", {})
         headers_map = {h["name"].lower(): h["value"] for h in payload.get("headers", [])}
 
         from_str = headers_map.get("from", "")
+        from_lower = from_str.lower()
         subject = headers_map.get("subject", "")
         rfc_id = headers_map.get("message-id", "")
         in_reply_to = headers_map.get("in-reply-to")
         refs_str = headers_map.get("references", "")
         refs = refs_str.split() if refs_str else []
 
-        # Auto-response / Bounce detection
+        # Auto-response / Bounce / Automated Notification detection
         auto_submitted = headers_map.get("auto-submitted", "").lower()
         x_autoreply = headers_map.get("x-autoreply", "").lower()
         precedence = headers_map.get("precedence", "").lower()
-        is_bounce = "mailer-daemon" in from_str.lower() or "postmaster" in from_str.lower() or "failure" in subject.lower()
-        is_auto = (auto_submitted and auto_submitted != "no") or bool(x_autoreply) or precedence in ["bulk", "junk", "auto_reply"]
+        is_bounce = "mailer-daemon" in from_lower or "postmaster" in from_lower or "failure" in subject.lower()
+        is_automated_sender = any(term in from_lower for term in [
+            "noreply", "no-reply", "donotreply", "do-not-reply",
+            "notifications@", "notification@", "alert@", "alerts@",
+            "newsletters@", "marketing@", "billing@", "updates@", "slice.bank",
+            "jobhai", "internshala", "jobalert", "indeed", "linkedin", "naukri", "vercel.com"
+        ])
+        is_auto = (auto_submitted and auto_submitted != "no") or bool(x_autoreply) or precedence in ["bulk", "junk", "auto_reply"] or is_automated_sender
 
         kind = "bounce" if is_bounce else ("auto" if is_auto else "normal")
 

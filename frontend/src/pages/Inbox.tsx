@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { Sparkles } from "lucide-react";
 import { markRead, retrySend, sendEmail, simulateReply, threadState, useS, loadInitialData, syncMailbox } from "@/lib/store";
 import { Badge, Empty, fmt, Page, Skeleton, strip, useReady } from "@/components/ui";
 
@@ -181,6 +183,17 @@ export default function Inbox() {
       <div className="flex flex-col md:grid md:grid-cols-[360px_minmax(0,1fr)] gap-4 flex-1 min-h-0 h-full overflow-hidden w-full max-w-full">
         {/* Left Column: Thread List */}
         <div className={`flex flex-col min-h-0 h-full w-full md:w-[360px] shrink-0 overflow-hidden ${sel ? "hidden md:flex" : "flex"}`}>
+          <Link
+            to="/hr-inbox"
+            className="mb-2 shrink-0 flex items-center justify-between px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-700 dark:text-indigo-300 font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all shadow-sm"
+          >
+            <span className="flex items-center gap-1.5 truncate">
+              <Sparkles size={14} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span className="truncate">Dedicated <strong>HR Inbox</strong> (Filtered)</span>
+            </span>
+            <span className="text-[11px] font-bold shrink-0 ml-1">Open →</span>
+          </Link>
+
           <div className="shrink-0 mb-2">
             <input
               className="input w-full"

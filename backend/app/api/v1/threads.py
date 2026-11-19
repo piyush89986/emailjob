@@ -11,11 +11,25 @@ from app.schemas.domain import MsgResponse, ThreadResponse
 router = APIRouter(prefix="/threads", tags=["Inbox"])
 
 
+AUTOMATED_SENDERS = (
+    "noreply", "no-reply", "donotreply", "do-not-reply",
+    "notifications@", "notification@", "alert@", "alerts@",
+    "billing@", "updates@", "slice.bank", "support@", "jobalert",
+    "jobhai", "internshala", "indeed", "linkedin", "naukri",
+    "newsletter", "marketing", "mailer-daemon", "postmaster", "vercel.com"
+)
+
+
 def derive_thread_state(messages: List[Message]) -> str:
     """Derive thread status matching frontend threadState(): 'replied' | 'waiting' | 'bounced'."""
     if any(m.kind == "bounce" for m in messages):
         return "bounced"
-    if any(m.dir == "in" and m.kind == "normal" for m in messages):
+    if any(
+        m.dir == "in"
+        and m.kind == "normal"
+        and not any(s in (m.from_addr or "").lower() for s in AUTOMATED_SENDERS)
+        for m in messages
+    ):
         return "replied"
     return "waiting"
 

@@ -78,15 +78,22 @@ class HRClassifierService:
         cls,
         account: EmailAccount,
         item: Dict[str, Any],
-        message: Optional[Message] = None
+        message: Optional[Message] = None,
+        user_id: Optional[str] = None
     ) -> Optional[HRInbox]:
         """Classifies incoming email, saves to HRInbox, and publishes SSE events.
 
         Preserves original emails and enforces unique constraint on (user_id, gmail_message_id).
         """
-        user_id = account.user_id
+        resolved_user_id = user_id or getattr(account, "user_id", None)
+        if not resolved_user_id:
+            from app.models.user import User
+            user_obj = await User.find_one(User.tenant_id == account.tenant_id)
+            resolved_user_id = user_obj.id if user_obj else account.tenant_id
+
+        user_id = resolved_user_id
         tenant_id = account.tenant_id
-        p_mid = item.get("provider_message_id") or (message.provider_message_id if message else "")
+        p_mid = item.get("provider_message_id") or (message.provider_message_id if message else "") or (f"msg_{message.id}" if message and message.id else "")
         if not p_mid:
             return None
 
@@ -473,6 +480,14 @@ Respond with the exact category, your confidence (0.0 to 1.0), the company name 
                 category=CATEGORY_MARKETING,
                 confidence=0.80,
                 reasoning="Automated marketing or billing address"
+            )
+
+        # 9. Automated / Out of office / Bounce
+        if any(k in combined for k in ["out of office", "on vacation", "automatic reply", "away from my email", "delivery status notification", "failure notice"]):
+            return ClassificationResult(
+                category=CATEGORY_OTHER,
+                confidence=0.92,
+                reasoning="Automated out-of-office or delivery notification"
             )
 
         return None

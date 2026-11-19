@@ -574,9 +574,23 @@ export function markRead(tid: string) {
   set((s) => ({ threads: s.threads.map((t) => (t.id === tid ? { ...t, unread: false } : t)) }));
 }
 
+const AUTOMATED_SENDERS = [
+  "noreply", "no-reply", "donotreply", "do-not-reply",
+  "notifications@", "notification@", "alert@", "alerts@",
+  "billing@", "updates@", "slice.bank", "support@", "jobalert",
+  "jobhai", "internshala", "indeed", "linkedin", "naukri",
+  "newsletter", "marketing", "mailer-daemon", "postmaster", "vercel.com"
+];
+
 export function threadState(t: Thread): "replied" | "waiting" | "bounced" {
   if (t.messages.some((m) => m.kind === "bounce")) return "bounced";
-  return t.messages.some((m) => m.dir === "in" && m.kind === "normal") ? "replied" : "waiting";
+  const hasHumanReply = t.messages.some(
+    (m) =>
+      m.dir === "in" &&
+      m.kind === "normal" &&
+      !AUTOMATED_SENDERS.some((term) => (m.from || "").toLowerCase().includes(term))
+  );
+  return hasHumanReply ? "replied" : "waiting";
 }
 
 export function simulateReply() {
