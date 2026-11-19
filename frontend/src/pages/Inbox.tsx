@@ -2,6 +2,112 @@ import { useEffect, useRef, useState } from "react";
 import { markRead, retrySend, sendEmail, simulateReply, threadState, useS, loadInitialData, syncMailbox } from "@/lib/store";
 import { Badge, Empty, fmt, Page, Skeleton, strip, useReady } from "@/components/ui";
 
+/**
+ * Checks whether an email body contains rich/complex HTML (tables, styles, images, newsletters)
+ * that require strict CSS isolation so they don't break the parent layout.
+ */
+function isComplexHtml(html: string): boolean {
+  if (!html) return false;
+  const lower = html.toLowerCase();
+  return (
+    lower.includes("<style") ||
+    lower.includes("<table") ||
+    lower.includes("<html") ||
+    lower.includes("<!doctype") ||
+    lower.includes("class=") ||
+    lower.includes("width=") ||
+    lower.includes("id=") ||
+    lower.includes("<img") ||
+    lower.length > 300
+  );
+}
+
+/**
+ * Sandboxed, self-resizing iframe viewer for HTML emails (Indeed, Jobhai, Newsletters, etc.)
+ * Completely isolates the email's CSS rules so they cannot leak into the host app or distort the layout.
+ */
+function EmailIframeViewer({ html }: { html: string }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(260);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) return;
+
+    // Inject base target="_blank" to ensure any clicked link opens safely in a new tab
+    const cleanContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <base target="_blank">
+          <style>
+            html, body {
+              margin: 0;
+              padding: 12px;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              color: #1e293b;
+              background-color: #ffffff;
+              word-break: break-word;
+              overflow-x: auto;
+            }
+            img {
+              max-width: 100% !important;
+              height: auto !important;
+            }
+            table {
+              max-width: 100% !important;
+            }
+          </style>
+        </head>
+        <body>${html}</body>
+      </html>
+    `;
+
+    doc.open();
+    doc.write(cleanContent);
+    doc.close();
+
+    const updateHeight = () => {
+      try {
+        if (iframe && doc.body) {
+          const scrollH = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight, 120);
+          setHeight(scrollH + 20);
+        }
+      } catch {
+        // ignore cross-origin check if any
+      }
+    };
+
+    updateHeight();
+    const t1 = setTimeout(updateHeight, 250);
+    const t2 = setTimeout(updateHeight, 800);
+    const t3 = setTimeout(updateHeight, 2000);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [html]);
+
+  return (
+    <div className="w-full max-w-full overflow-hidden rounded-lg bg-white border border-slate-200 dark:border-slate-800 shadow-xs my-1">
+      <iframe
+        ref={iframeRef}
+        className="w-full border-0 block"
+        style={{ height: `${height}px`, minHeight: "120px" }}
+        sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+        title="Email content"
+      />
+    </div>
+  );
+}
+
 export default function Inbox() {
   const ready = useReady();
   const threads = useS((s) => s.threads);
@@ -72,12 +178,12 @@ export default function Inbox() {
         </div>
       }
     >
-      <div className="flex flex-col md:grid md:grid-cols-[360px_1fr] gap-4 flex-1 min-h-0 h-full overflow-hidden">
+      <div className="flex flex-col md:grid md:grid-cols-[360px_minmax(0,1fr)] gap-4 flex-1 min-h-0 h-full overflow-hidden w-full max-w-full">
         {/* Left Column: Thread List */}
-        <div className={`flex flex-col min-h-0 h-full ${sel ? "hidden md:flex" : "flex"}`}>
+        <div className={`flex flex-col min-h-0 h-full w-full md:w-[360px] shrink-0 overflow-hidden ${sel ? "hidden md:flex" : "flex"}`}>
           <div className="shrink-0 mb-2">
             <input
-              className="input"
+              className="input w-full"
               placeholder="Search conversations…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -140,13 +246,13 @@ export default function Inbox() {
         </div>
 
         {/* Right Column: Active Conversation */}
-        <div className={`flex flex-col min-h-0 h-full ${!sel ? "hidden md:flex" : "flex"}`}>
+        <div className={`flex flex-col min-h-0 h-full min-w-0 w-full overflow-hidden ${!sel ? "hidden md:flex" : "flex"}`}>
           {!cur ? (
             <div className="card h-full flex flex-col items-center justify-center text-center p-8">
               <Empty title="Select a conversation" hint="Click any email thread on the left to read and reply." />
             </div>
           ) : (
-            <div className="card h-full flex flex-col min-h-0 overflow-hidden p-4">
+            <div className="card h-full flex flex-col min-h-0 min-w-0 w-full overflow-hidden p-4">
               {/* Header */}
               <div className="shrink-0 pb-3 border-b border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-2 md:hidden mb-2">
@@ -169,11 +275,11 @@ export default function Inbox() {
               </div>
 
               {/* Message scroll list */}
-              <div className="flex-1 min-h-0 overflow-y-auto space-y-3 py-3 pr-2">
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-3 py-3 pr-2 w-full min-w-0">
                 {cur.messages.map((m) => (
                   <div
                     key={m.id}
-                    className={`rounded-lg p-3.5 text-sm ${
+                    className={`rounded-lg p-3.5 text-sm max-w-full overflow-hidden min-w-0 ${
                       m.dir === "out"
                         ? "bg-indigo-50/80 border border-indigo-100/80 dark:bg-indigo-950/40 dark:border-indigo-900/50 ml-4"
                         : "bg-slate-100/80 border border-slate-200/80 dark:bg-slate-800/50 dark:border-slate-700/60 mr-4"
@@ -187,10 +293,16 @@ export default function Inbox() {
                         <span>{fmt(m.at)}</span>
                       </span>
                     </div>
-                    <div
-                      className="prose max-w-none text-sm dark:prose-invert break-words overflow-x-auto"
-                      dangerouslySetInnerHTML={{ __html: m.body }}
-                    />
+
+                    {isComplexHtml(m.body) ? (
+                      <EmailIframeViewer html={m.body} />
+                    ) : (
+                      <div
+                        className="prose max-w-none text-sm dark:prose-invert break-words overflow-x-auto"
+                        dangerouslySetInnerHTML={{ __html: m.body }}
+                      />
+                    )}
+
                     {m.delivery === "failed" && (
                       <button className="btn-ghost mt-2 text-xs" onClick={() => retrySend(cur.id, m.id)}>
                         Retry sending
@@ -202,9 +314,9 @@ export default function Inbox() {
               </div>
 
               {/* Reply section: pinned at bottom */}
-              <div className="shrink-0 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="shrink-0 pt-3 border-t border-slate-100 dark:border-slate-800 w-full min-w-0">
                 <textarea
-                  className="input resize-none"
+                  className="input resize-none w-full"
                   rows={3}
                   placeholder="Write a reply… (Ctrl+Enter to send)"
                   value={reply}
@@ -219,7 +331,7 @@ export default function Inbox() {
                 <div className="mt-2 flex items-center justify-between">
                   <span className="text-xs text-slate-400">Ctrl+Enter to send</span>
                   <button
-                    className="btn"
+                    className="btn shrink-0"
                     onClick={send}
                     disabled={!reply.trim()}
                   >
