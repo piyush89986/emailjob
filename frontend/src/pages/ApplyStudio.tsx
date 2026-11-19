@@ -135,7 +135,7 @@ function CustomWorkflowNode({ data, id, selected }: { data: any; id: string; sel
       onClick={handleSelect}
       className={`w-72 sm:w-80 rounded-2xl border ${
         selected
-          ? "border-sky-500 ring-2 ring-sky-400 shadow-xl"
+          ? "border-indigo-500 ring-2 ring-indigo-400 shadow-xl"
           : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-lg"
       } bg-white dark:bg-slate-900 overflow-hidden text-xs transition-all hover:shadow-xl cursor-pointer group select-none`}
     >
@@ -143,7 +143,7 @@ function CustomWorkflowNode({ data, id, selected }: { data: any; id: string; sel
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-4 !h-4 !bg-sky-500 !border-2 !border-white dark:!border-slate-900 shadow-md transition-transform hover:scale-125 !-left-2"
+        className="!w-3.5 !h-3.5 !bg-white !border-2 !border-slate-400 dark:!border-slate-500 shadow-sm transition-transform hover:scale-125 !-left-1.5"
       />
 
       {/* Top Accent Stripe */}
@@ -222,7 +222,7 @@ function CustomWorkflowNode({ data, id, selected }: { data: any; id: string; sel
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-4 !h-4 !bg-sky-500 !border-2 !border-white dark:!border-slate-900 shadow-md transition-transform hover:scale-125 !-right-2"
+        className="!w-3.5 !h-3.5 !bg-white !border-2 !border-slate-400 dark:!border-slate-500 shadow-sm transition-transform hover:scale-125 !-right-1.5"
       />
     </div>
   );
@@ -394,10 +394,13 @@ export default function ApplyStudio() {
   const [selectedWorkflow, setSelectedWorkflow] = useState<AutomationWorkflow | null>(null);
   const [executionLogs, setExecutionLogs] = useState<WorkflowExecution | null>(null);
 
+  // Workflow Mode: manual review vs auto mode (with local storage persistence)
+  const [workflowMode, setWorkflowMode] = useState<"manual" | "auto">(() => {
+    return (localStorage.getItem("jobmail_workflow_mode") as "manual" | "auto") || "manual";
+  });
+
   // Slide-over Drawers state & Edit form state (Reference UI pattern)
   const [drawerMode, setDrawerMode] = useState<"none" | "add" | "edit">("none");
-  const [isRenamingWorkflow, setIsRenamingWorkflow] = useState(false);
-  const [workflowNameInput, setWorkflowNameInput] = useState("");
   const [editFormData, setEditFormData] = useState<{
     label: string;
     description: string;
@@ -414,19 +417,13 @@ export default function ApplyStudio() {
     model: "gpt-4o-mini",
   });
 
-  // High-visibility electric cyan edge wires
+  // Clean simple white wires with NO arrows
   const edgeOptions = {
     type: "smoothstep",
-    animated: true,
+    animated: false,
     style: {
-      stroke: "#0ea5e9", // Bright Electric Sky Blue - vibrant & visible on dark and light!
-      strokeWidth: 3.5,
-    },
-    markerEnd: {
-      type: MarkerType.ArrowClosed,
-      color: "#0ea5e9",
-      width: 22,
-      height: 22,
+      stroke: "#ffffff",
+      strokeWidth: 2,
     },
   };
 
@@ -437,9 +434,8 @@ export default function ApplyStudio() {
           {
             ...connection,
             type: "smoothstep",
-            animated: true,
-            style: { stroke: "#0ea5e9", strokeWidth: 3.5 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#0ea5e9", width: 22, height: 22 },
+            animated: false,
+            style: { stroke: "#ffffff", strokeWidth: 2 },
           },
           eds
         )
@@ -459,7 +455,6 @@ export default function ApplyStudio() {
     if (workflows && workflows.length > 0 && !selectedWorkflow) {
       const wf = workflows[0];
       setSelectedWorkflow(wf);
-      setWorkflowNameInput(wf.name || "Automatic Job Application Pipeline");
       if (wf.nodes && wf.nodes.length > 0) {
         setNodes(wf.nodes);
       }
@@ -467,9 +462,9 @@ export default function ApplyStudio() {
         const mappedEdges = wf.edges.map((e: any) => ({
           ...e,
           type: "smoothstep",
-          animated: true,
-          style: { stroke: "#0ea5e9", strokeWidth: 3.5 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#0ea5e9", width: 22, height: 22 },
+          animated: false,
+          style: { stroke: "#ffffff", strokeWidth: 2 },
+          markerEnd: undefined,
         }));
         setEdges(mappedEdges);
       }
@@ -556,9 +551,8 @@ export default function ApplyStudio() {
         source: sourceId,
         target: newId,
         type: "smoothstep",
-        animated: true,
-        style: { stroke: "#0ea5e9", strokeWidth: 3.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#0ea5e9", width: 22, height: 22 },
+        animated: false,
+        style: { stroke: "#ffffff", strokeWidth: 2 },
       };
       setEdges((eds) => [...eds, newEdge]);
     }
@@ -641,20 +635,64 @@ export default function ApplyStudio() {
     }
   };
 
-  // Start Analysis Workflow
+  // Start Analysis Workflow (Manual Mode vs Auto Mode)
   const handleAnalyzeAndLaunch = async () => {
     if (!selectedFile) return toast("Please select or drop a job poster first", "err");
     setIsUploading(true);
     try {
-      // 1. Upload and trigger AI analysis
+      // 1. Upload and trigger AI vision extraction
       const poster = await uploadJobPoster(selectedFile, true);
       setActivePoster(poster);
-      if (poster.extracted_data) {
-        setEditDetails(poster.extracted_data);
-        setEmailTo(poster.extracted_data.hr_email || "");
-      }
+      const extracted = poster.extracted_data || {
+        required_skills: [],
+        job_responsibilities: [],
+        candidate_requirements: [],
+        confidence_score: 0.8,
+        requires_manual_verification: false
+      };
+      setEditDetails(extracted);
+      setEmailTo(extracted.hr_email || "");
       setEditableJd(poster.generated_jd || "");
-      setReviewStep(1);
+
+      // If in AUTOMATIC MODE, execute entire pipeline end-to-end
+      if (workflowMode === "auto") {
+        toast("Auto Mode: Analyzing job criteria and matching role resumes...");
+        const matches = await matchResumesForPoster(poster.id, extracted);
+        setResumeMatches(matches);
+        const bestResumeId = matches.length > 0 ? matches[0].resume_id : undefined;
+        if (bestResumeId) setSelectedResumeId(bestResumeId);
+
+        toast("Auto Mode: Generating personalized cold application email...");
+        const draft = await generateEmailForPoster(poster.id, {
+          extractedData: extracted,
+          resumeId: bestResumeId,
+          tone: emailTone
+        });
+
+        const targetEmail = draft.to_email || extracted.hr_email;
+        if (targetEmail) {
+          toast("Auto Mode: Dispatching application via Gmail...");
+          await sendPosterApplication(poster.id, {
+            toEmail: targetEmail,
+            subject: draft.subject || "Job Application",
+            bodyHtml: draft.body_html || "",
+            resumeId: bestResumeId,
+            extractedData: extracted,
+            generatedJd: poster.generated_jd
+          });
+          setActivePoster(null);
+          setSelectedFile(null);
+          setFilePreview(null);
+          setActiveTab("history");
+          toast("Application sent successfully via Gmail!", "ok");
+        } else {
+          toast("HR email not detected on poster. Please review and provide recipient email.", "err");
+          setReviewStep(1);
+        }
+      } else {
+        // MANUAL MODE: Open interactive step-by-step review
+        setReviewStep(1);
+      }
     } catch (err) {
       // handled in store
     } finally {
@@ -836,11 +874,45 @@ export default function ApplyStudio() {
                   Upload a hiring poster or PDF job description. AI reads the image, selects your best resume, crafts a tailored email, and applies directly via Gmail.
                 </p>
               </div>
-              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                <span className="text-xs font-semibold">Workflow Mode:</span>
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-900 px-2 py-0.5 rounded shadow-xs">
-                  <ShieldCheck size={13} /> Manual Review
+              {/* Interactive Workflow Mode Toggle */}
+              <div className="flex items-center gap-2.5 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                <span className="text-xs font-semibold px-2 text-slate-600 dark:text-slate-400 hidden sm:inline">
+                  Workflow Mode:
                 </span>
+                <div className="inline-flex rounded-lg bg-white dark:bg-slate-900 p-0.5 border border-slate-200 dark:border-slate-700 shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkflowMode("manual");
+                      localStorage.setItem("jobmail_workflow_mode", "manual");
+                      toast("Manual Mode active: You can review and edit each application before sending.");
+                    }}
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      workflowMode === "manual"
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <ShieldCheck size={13} />
+                    <span>Manual Mode</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkflowMode("auto");
+                      localStorage.setItem("jobmail_workflow_mode", "auto");
+                      toast("Automatic Mode active: AI will analyze, match resume & auto-send via Gmail!");
+                    }}
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      workflowMode === "auto"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <Zap size={13} />
+                    <span>Auto Mode</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -927,15 +999,21 @@ export default function ApplyStudio() {
               <button
                 disabled={!selectedFile || isUploading}
                 onClick={handleAnalyzeAndLaunch}
-                className="btn btn-primary flex items-center gap-2 px-5 py-2.5 font-semibold text-sm shadow-md"
+                className={`btn flex items-center gap-2 px-5 py-2.5 font-bold text-sm shadow-md transition-all ${
+                  workflowMode === "auto"
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
+                    : "btn-primary shadow-indigo-600/20"
+                }`}
               >
                 {isUploading ? (
                   <>
-                    <RotateCcw size={16} className="animate-spin" /> Analyzing with Vision AI...
+                    <RotateCcw size={16} className="animate-spin" />
+                    <span>{workflowMode === "auto" ? "Analyzing & Auto-Sending via Gmail..." : "Analyzing with Vision AI..."}</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles size={16} /> Analyze Job & Generate Application
+                    {workflowMode === "auto" ? <Zap size={16} /> : <Sparkles size={16} />}
+                    <span>{workflowMode === "auto" ? "Analyze Job & Send Automatically (1-Click)" : "Analyze Job & Generate Application"}</span>
                   </>
                 )}
               </button>
@@ -1003,165 +1081,48 @@ export default function ApplyStudio() {
 
       {/* --- TAB 2: VISUAL WORKFLOW BUILDER --- */}
       {activeTab === "builder" && (
-        <div className="space-y-4">
-          {/* Canvas Top Action Header (Reference UI pattern) */}
-          <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-            {/* Left: Pipeline Title & Inline Edit & Status */}
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-3">
-                {isRenamingWorkflow ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      className="input text-sm font-bold py-1 px-2.5 max-w-xs"
-                      value={workflowNameInput}
-                      onChange={(e) => setWorkflowNameInput(e.target.value)}
-                      autoFocus
-                    />
-                    <button
-                      onClick={() => {
-                        if (selectedWorkflow) {
-                          setSelectedWorkflow({ ...selectedWorkflow, name: workflowNameInput });
-                        }
-                        setIsRenamingWorkflow(false);
-                      }}
-                      className="btn btn-primary text-xs py-1 px-2.5 flex items-center gap-1"
-                    >
-                      <Check size={12} /> Save
-                    </button>
-                    <button
-                      onClick={() => setIsRenamingWorkflow(false)}
-                      className="btn text-xs py-1 px-2"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2.5">
-                    <h2 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
-                      <Zap size={18} className="text-indigo-600 dark:text-indigo-400" />
-                      {selectedWorkflow?.name || "Automatic Job Application Pipeline"}
-                    </h2>
-                    <button
-                      onClick={() => {
-                        setWorkflowNameInput(selectedWorkflow?.name || "Automatic Job Application Pipeline");
-                        setIsRenamingWorkflow(true);
-                      }}
-                      className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1"
-                      title="Rename workflow"
-                    >
-                      <Pencil size={11} /> Edit
-                    </button>
-                  </div>
-                )}
-
-                {/* Status Badge */}
-                <span
-                  className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
-                    selectedWorkflow?.is_active
-                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
-                      : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
-                  }`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      selectedWorkflow?.is_active ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
-                    }`}
-                  />
-                  {selectedWorkflow?.is_active ? "ACTIVE" : "DRAFT"}
-                </span>
-                <span className="text-[11px] text-slate-400 font-medium hidden lg:inline">
-                  {nodes.length} Steps • {edges.length} Connections
-                </span>
-              </div>
-
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Campaign Flow — Define the steps, AI filters, and conditions for your outreach sequence.
-              </p>
-            </div>
-
-            {/* Right: Action Buttons (Add Node, Save Sequence, Auto Tidy, Test Run, Start Campaign) */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* + Add Node Button */}
-              <button
-                onClick={() => setDrawerMode("add")}
-                className="btn text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all shadow-xs"
-              >
-                <Plus size={15} />
-                <span>Add Node</span>
-              </button>
-
-              {/* Save Sequence Button */}
-              <button
-                onClick={() => {
-                  if (selectedWorkflow) {
-                    saveWorkflow({
-                      id: selectedWorkflow.id,
-                      name: selectedWorkflow.name,
-                      nodes: nodes as any,
-                      edges: edges as any,
-                      settings: selectedWorkflow.settings,
-                    });
-                  }
-                }}
-                className="btn text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-xs"
-              >
-                <Copy size={14} className="text-slate-500" />
-                <span>Save Sequence</span>
-              </button>
-
-              {/* Auto Tidy Grid */}
-              <button
-                onClick={handleTidyLayout}
-                className="btn text-xs py-2 px-3 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-                title="Organize canvas into tidy 2-row grid"
-              >
-                <LayoutGrid size={14} className="text-indigo-500" />
-                <span className="hidden sm:inline">Auto Tidy</span>
-              </button>
-
-              {/* Test Run */}
-              <button
-                onClick={async () => {
-                  if (selectedWorkflow) {
-                    const exec = await executeWorkflow(selectedWorkflow.id, undefined, true);
-                    setExecutionLogs(exec);
-                  }
-                }}
-                className="btn text-xs py-2 px-3 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <Play size={13} className="text-emerald-500" />
-                <span>Test Run</span>
-              </button>
-
-              {/* Activate / Start Campaign Toggle Button */}
-              <button
-                onClick={() => {
-                  if (selectedWorkflow) {
-                    toggleWorkflowActive(selectedWorkflow.id, !selectedWorkflow.is_active);
-                  }
-                }}
-                className={`btn text-xs py-2 px-4 font-bold flex items-center gap-1.5 shadow-sm transition-all ${
-                  selectedWorkflow?.is_active
-                    ? "bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 dark:bg-rose-950 dark:text-rose-300"
-                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
-                }`}
-              >
-                {selectedWorkflow?.is_active ? (
-                  <>
-                    <AlertTriangle size={14} />
-                    <span>Pause Campaign</span>
-                  </>
-                ) : (
-                  <>
-                    <Play size={14} />
-                    <span>Start Campaign</span>
-                  </>
-                )}
-              </button>
-            </div>
+        <div className="space-y-3">
+          {/* Action Toolbar: Only Add Node, Save, Test Run */}
+          <div className="flex items-center justify-end gap-2.5">
+            <button
+              onClick={() => setDrawerMode("add")}
+              className="btn text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 shadow-xs"
+            >
+              <Plus size={15} />
+              <span>Add Node</span>
+            </button>
+            <button
+              onClick={() => {
+                if (selectedWorkflow) {
+                  saveWorkflow({
+                    id: selectedWorkflow.id,
+                    name: selectedWorkflow.name,
+                    nodes: nodes as any,
+                    edges: edges as any,
+                    settings: selectedWorkflow.settings,
+                  });
+                }
+              }}
+              className="btn btn-primary text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold shadow-xs"
+            >
+              <Copy size={14} />
+              <span>Save</span>
+            </button>
+            <button
+              onClick={async () => {
+                if (selectedWorkflow) {
+                  const exec = await executeWorkflow(selectedWorkflow.id, undefined, true);
+                  setExecutionLogs(exec);
+                }
+              }}
+              className="btn text-xs py-2 px-3.5 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-slate-800 dark:text-slate-100 shadow-xs"
+            >
+              <Play size={13} className="text-emerald-500" />
+              <span>Test Run</span>
+            </button>
           </div>
 
-          {/* Full Width Canvas Container (No squishing sidebar!) */}
+          {/* Full Width Canvas Container */}
           <div className="w-full h-[760px] rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 overflow-hidden shadow-sm relative">
             <ReactFlow
               nodes={nodes}
@@ -1175,23 +1136,17 @@ export default function ApplyStudio() {
               fitView
               className="w-full h-full"
             >
-              <Background gap={24} size={1.5} color="#6366f125" />
+              <Background gap={24} size={1.5} color="#ffffff15" />
               <Controls className="!bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-md" />
               <MiniMap
-                nodeColor={(n) => {
-                  if (n.data?.category === "trigger") return "#10b981";
-                  if (n.data?.category === "condition") return "#f59e0b";
-                  if (n.data?.category === "email") return "#0ea5e9";
-                  if (n.data?.category === "resume") return "#a855f7";
-                  return "#6366f1";
-                }}
+                nodeColor={() => "#ffffff"}
                 className="!bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-md"
               />
             </ReactFlow>
 
             {/* Floating Canvas Quick Tip */}
             <div className="absolute bottom-4 left-4 z-10 hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/90 dark:bg-slate-900/90 backdrop-blur-xs border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 shadow-sm pointer-events-none">
-              <span>💡 Click any node to open settings drawer • Click 🗑️ to delete • Drag cyan dots to wire</span>
+              <span>💡 Click any node to open settings drawer • Click 🗑️ to delete • Drag handles to connect</span>
             </div>
           </div>
         </div>
