@@ -53,7 +53,8 @@ import {
   Terminal,
   ArrowRight,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  Square
 } from "lucide-react";
 
 import {
@@ -715,9 +716,48 @@ export default function ApplyStudio() {
     }
   };
 
+  // Cancellation ref to immediately halt automation pipeline if user stops it
+  const isCancelledRef = useRef<boolean>(false);
+
+  // Stop / Cancel Automation Pipeline
+  const handleStopAutomation = () => {
+    isCancelledRef.current = true;
+    setIsUploading(false);
+    setLivePipelineStatus("attention_needed");
+
+    setPipelineSkills((prev) =>
+      prev.map((s) =>
+        s.status === "running"
+          ? {
+              ...s,
+              status: "warning",
+              message: "Execution stopped by user",
+              error: "Dikkat: User ne automation beech me stop kar di."
+            }
+          : s
+      )
+    );
+
+    const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    setPipelineLogs((prev) => [
+      ...prev,
+      {
+        timestamp: time,
+        level: "warning",
+        skill: "System",
+        text: "⛔ Automation stopped by user. Pipeline execution halted."
+      }
+    ]);
+
+    toast("Automation stopped by user", "ok");
+  };
+
   // Start Analysis Workflow (Manual Mode vs Auto Mode with Live Skills Audit Screen)
   const handleAnalyzeAndLaunch = async () => {
     if (!selectedFile) return toast("Please select or drop a job poster first", "err");
+
+    // Reset cancellation flag
+    isCancelledRef.current = false;
 
     // Open Live Skills Audit screen immediately
     setShowLiveAudit(true);
@@ -809,6 +849,8 @@ export default function ApplyStudio() {
         }
       }
 
+      if (isCancelledRef.current) return;
+
       // --- SKILL 2: Job Description Generator ---
       updateSkill("skill-jd", { status: "running", message: "Synthesizing structured Markdown JD..." });
       log("info", "JD Generator", "Formatting job responsibilities, skills, and qualifications into Markdown JD...");
@@ -822,6 +864,8 @@ export default function ApplyStudio() {
       });
       log("success", "JD Generator", "Markdown Job Description ready for resume matching.");
 
+      if (isCancelledRef.current) return;
+
       // --- SKILL 3: AI Resume Matcher & Scorer ---
       updateSkill("skill-resume", { status: "running", message: "Matching candidate resumes with extracted job criteria..." });
       log("info", "Resume Matcher", `Evaluating fit against stored role resumes in Resume Builder...`);
@@ -833,6 +877,8 @@ export default function ApplyStudio() {
       } catch (err: any) {
         log("warning", "Resume Matcher", `Resume matching warning: ${err.message || "Using fallback"}`);
       }
+
+      if (isCancelledRef.current) return;
 
       const bestMatch = matchedResumes.length > 0 ? matchedResumes[0] : null;
       if (bestMatch) {
@@ -851,6 +897,8 @@ export default function ApplyStudio() {
         });
         log("warning", "Resume Matcher", "Dikkat: No saved role resumes found in Resume Builder.");
       }
+
+      if (isCancelledRef.current) return;
 
       // --- SKILL 4: Safety Gate & Recruiter Email Check ---
       updateSkill("skill-gate", { status: "running", message: "Validating recruiter HR email & minimum score threshold..." });
@@ -884,6 +932,8 @@ export default function ApplyStudio() {
         log("success", "Safety Gate", `Passed: Score ${matchScore}% >= 75% & valid email ${extracted.hr_email}`);
       }
 
+      if (isCancelledRef.current) return;
+
       // --- SKILL 5: Cold Application Email Drafter ---
       updateSkill("skill-email", { status: "running", message: "Drafting personalized application email with AI..." });
       log("info", "Email Drafter", `Generating cold application email with ${emailTone} tone...`);
@@ -912,6 +962,8 @@ export default function ApplyStudio() {
         });
         log("error", "Email Drafter", `Dikkat in Email Drafter: ${err.message}`);
       }
+
+      if (isCancelledRef.current) return;
 
       // --- SKILL 6 & 7: Gmail Dispatcher & Application Tracker ---
       if (workflowMode === "auto") {
@@ -1323,9 +1375,22 @@ export default function ApplyStudio() {
                 )}
               </button>
 
-              <button
-                disabled={!selectedFile || isUploading}
-                onClick={handleAnalyzeAndLaunch}
+              <div className="flex items-center gap-2">
+                {isUploading && (
+                  <button
+                    type="button"
+                    onClick={handleStopAutomation}
+                    className="btn text-xs py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white font-bold flex items-center gap-1.5 rounded-xl shadow-xs transition-all"
+                    title="Stop ongoing automation immediately"
+                  >
+                    <Square size={12} className="fill-white" />
+                    <span>Stop</span>
+                  </button>
+                )}
+
+                <button
+                  disabled={!selectedFile || isUploading}
+                  onClick={handleAnalyzeAndLaunch}
                 className={`btn flex items-center gap-2 px-5 py-2.5 font-bold text-sm shadow-md transition-all ${
                   workflowMode === "auto"
                     ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
@@ -1346,6 +1411,7 @@ export default function ApplyStudio() {
               </button>
             </div>
           </div>
+        </div>
 
           {/* Recent Uploaded Posters Carousel / Grid */}
           <div>
@@ -1947,6 +2013,18 @@ export default function ApplyStudio() {
               </div>
 
               <div className="flex items-center gap-2.5">
+                {/* Stop Automation Button in Header when running */}
+                {livePipelineStatus === "running" && (
+                  <button
+                    onClick={handleStopAutomation}
+                    className="btn text-xs py-1.5 px-3 bg-rose-600 hover:bg-rose-700 text-white font-bold flex items-center gap-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
+                    title="Stop ongoing automation immediately"
+                  >
+                    <Square size={12} className="fill-white" />
+                    <span>Stop Automation</span>
+                  </button>
+                )}
+
                 {/* Pipeline Status Badge */}
                 {livePipelineStatus === "running" && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
@@ -2174,12 +2252,25 @@ export default function ApplyStudio() {
 
             {/* Modal Footer with Actions */}
             <div className="border-t border-slate-200 px-6 py-3.5 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-wrap items-center justify-between gap-3">
-              <button
-                onClick={() => setShowLiveAudit(false)}
-                className="btn text-xs py-2 px-4 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                Close Logs
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowLiveAudit(false)}
+                  className="btn text-xs py-2 px-4 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Close Logs
+                </button>
+                {/* Stop Automation option in logs footer */}
+                {livePipelineStatus === "running" && (
+                  <button
+                    onClick={handleStopAutomation}
+                    className="btn text-xs py-2 px-3.5 bg-rose-600 hover:bg-rose-700 text-white font-bold flex items-center gap-1.5 shadow-sm shadow-rose-600/20"
+                    title="Stop ongoing automation pipeline"
+                  >
+                    <Square size={12} className="fill-white" />
+                    <span>Stop Automation</span>
+                  </button>
+                )}
+              </div>
 
               <div className="flex items-center gap-2">
                 {/* Attention needed / Error action */}
