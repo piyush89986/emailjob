@@ -50,66 +50,66 @@ class ExecuteWorkflowRequest(BaseModel):
 
 
 def get_default_workflow_nodes_and_edges():
-    """Default standard AI application pipeline template."""
+    """Default standard AI application pipeline template arranged in comfortable 2-row layout."""
     nodes = [
         {
             "id": "node-1",
             "type": "trigger",
-            "position": {"x": 50, "y": 180},
-            "data": {"label": "Job Poster Uploaded", "category": "trigger", "description": "Triggers when image/PDF is uploaded"}
+            "position": {"x": 60, "y": 60},
+            "data": {"label": "Job Poster Uploaded", "category": "trigger", "description": "Triggers when image or PDF is uploaded"}
         },
         {
             "id": "node-2",
             "type": "analyzeJob",
-            "position": {"x": 300, "y": 180},
+            "position": {"x": 440, "y": 60},
             "data": {"label": "AI Vision Extraction", "category": "ai", "description": "Extracts Company, Role, Skills & HR Email"}
         },
         {
             "id": "node-3",
             "type": "generateJd",
-            "position": {"x": 550, "y": 180},
+            "position": {"x": 820, "y": 60},
             "data": {"label": "Generate Job Description", "category": "ai", "description": "Builds structured Markdown JD"}
         },
         {
             "id": "node-4",
             "type": "matchResume",
-            "position": {"x": 800, "y": 180},
-            "data": {"label": "Match Best Resume", "category": "resume", "description": "5-Factor Weighted Scoring"}
+            "position": {"x": 1200, "y": 60},
+            "data": {"label": "Match Best Resume", "category": "resume", "description": "5-Factor Weighted Scoring Engine"}
         },
         {
             "id": "node-5",
             "type": "condition",
-            "position": {"x": 1050, "y": 180},
-            "data": {"label": "Safety Check", "category": "condition", "threshold": 75, "description": "Score >= 75% & HR Email Exists"}
+            "position": {"x": 1200, "y": 340},
+            "data": {"label": "Safety Gate Check", "category": "condition", "threshold": 75, "description": "Verifies Match Score >= 75% & Valid HR Email"}
         },
         {
             "id": "node-6",
             "type": "generateEmail",
-            "position": {"x": 1300, "y": 180},
-            "data": {"label": "AI Email Drafter", "category": "ai", "description": "Personalized application email"}
+            "position": {"x": 820, "y": 340},
+            "data": {"label": "AI Email Drafter", "category": "ai", "description": "Drafts tailored application email from profile"}
         },
         {
             "id": "node-7",
             "type": "sendGmail",
-            "position": {"x": 1550, "y": 180},
-            "data": {"label": "Send via Gmail", "category": "email", "description": "Sends email with resume attachment"}
+            "position": {"x": 440, "y": 340},
+            "data": {"label": "Send via Gmail", "category": "email", "description": "Dispatches email with resume MIME attachment"}
         },
         {
             "id": "node-8",
             "type": "saveApplication",
-            "position": {"x": 1800, "y": 180},
-            "data": {"label": "Track Application", "category": "tracking", "description": "Saves to Application Tracker"}
+            "position": {"x": 60, "y": 340},
+            "data": {"label": "Track Application", "category": "tracking", "description": "Logs application & begins Gmail reply tracking"}
         }
     ]
 
     edges = [
-        {"id": "e1-2", "source": "node-1", "target": "node-2"},
-        {"id": "e2-3", "source": "node-2", "target": "node-3"},
-        {"id": "e3-4", "source": "node-3", "target": "node-4"},
-        {"id": "e4-5", "source": "node-4", "target": "node-5"},
-        {"id": "e5-6", "source": "node-5", "target": "node-6"},
-        {"id": "e6-7", "source": "node-6", "target": "node-7"},
-        {"id": "e7-8", "source": "node-7", "target": "node-8"},
+        {"id": "e1-2", "source": "node-1", "target": "node-2", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
+        {"id": "e2-3", "source": "node-2", "target": "node-3", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
+        {"id": "e3-4", "source": "node-3", "target": "node-4", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
+        {"id": "e4-5", "source": "node-4", "target": "node-5", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
+        {"id": "e5-6", "source": "node-5", "target": "node-6", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
+        {"id": "e6-7", "source": "node-6", "target": "node-7", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
+        {"id": "e7-8", "source": "node-7", "target": "node-8", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
     ]
 
     return nodes, edges

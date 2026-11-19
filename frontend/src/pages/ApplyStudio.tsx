@@ -4,7 +4,6 @@ import {
   Background,
   Controls,
   MiniMap,
-  Panel,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -12,7 +11,8 @@ import {
   Edge,
   Node,
   Handle,
-  Position
+  Position,
+  MarkerType
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
@@ -43,7 +43,11 @@ import {
   DollarSign,
   Briefcase,
   X,
-  FileCheck
+  FileCheck,
+  Plus,
+  LayoutGrid,
+  Sliders,
+  Maximize2
 } from "lucide-react";
 
 import {
@@ -75,7 +79,7 @@ import { Badge, Page, fmt } from "@/components/ui";
 
 // --- Custom React Flow Node Components ---
 
-function CustomWorkflowNode({ data, id }: { data: any; id: string }) {
+function CustomWorkflowNode({ data, id, selected }: { data: any; id: string; selected?: boolean }) {
   const isTrigger = data.category === "trigger";
   const isAi = data.category === "ai";
   const isResume = data.category === "resume";
@@ -84,50 +88,86 @@ function CustomWorkflowNode({ data, id }: { data: any; id: string }) {
   const isTracking = data.category === "tracking";
 
   let headerColor = "bg-indigo-600 text-white";
-  let borderColor = "border-indigo-400";
-  let icon = <Sparkles size={14} className="shrink-0" />;
+  let borderColor = selected ? "border-indigo-500 ring-2 ring-indigo-400" : "border-indigo-200 dark:border-indigo-800";
+  let icon = <Sparkles size={16} className="shrink-0" />;
+  let badgeLabel = "AI Action";
 
   if (isTrigger) {
     headerColor = "bg-emerald-600 text-white";
-    borderColor = "border-emerald-500";
-    icon = <Upload size={14} className="shrink-0" />;
+    borderColor = selected ? "border-emerald-500 ring-2 ring-emerald-400" : "border-emerald-200 dark:border-emerald-800";
+    icon = <Upload size={16} className="shrink-0" />;
+    badgeLabel = "Trigger";
   } else if (isCondition) {
     headerColor = "bg-amber-600 text-white";
-    borderColor = "border-amber-500";
-    icon = <ShieldCheck size={14} className="shrink-0" />;
+    borderColor = selected ? "border-amber-500 ring-2 ring-amber-400" : "border-amber-200 dark:border-amber-800";
+    icon = <ShieldCheck size={16} className="shrink-0" />;
+    badgeLabel = "Condition";
   } else if (isEmail) {
     headerColor = "bg-sky-600 text-white";
-    borderColor = "border-sky-500";
-    icon = <Mail size={14} className="shrink-0" />;
+    borderColor = selected ? "border-sky-500 ring-2 ring-sky-400" : "border-sky-200 dark:border-sky-800";
+    icon = <Mail size={16} className="shrink-0" />;
+    badgeLabel = "Email";
   } else if (isResume) {
     headerColor = "bg-purple-600 text-white";
-    borderColor = "border-purple-500";
-    icon = <FileCheck size={14} className="shrink-0" />;
+    borderColor = selected ? "border-purple-500 ring-2 ring-purple-400" : "border-purple-200 dark:border-purple-800";
+    icon = <FileCheck size={16} className="shrink-0" />;
+    badgeLabel = "Resume Match";
   } else if (isTracking) {
     headerColor = "bg-rose-600 text-white";
-    borderColor = "border-rose-500";
-    icon = <CheckCircle2 size={14} className="shrink-0" />;
+    borderColor = selected ? "border-rose-500 ring-2 ring-rose-400" : "border-rose-200 dark:border-rose-800";
+    icon = <CheckCircle2 size={16} className="shrink-0" />;
+    badgeLabel = "Tracking";
   }
 
   return (
-    <div className={`w-56 rounded-xl border-2 ${borderColor} bg-white shadow-md dark:bg-slate-900 overflow-hidden text-xs`}>
-      <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !bg-indigo-500" />
-      <div className={`px-2.5 py-1.5 flex items-center justify-between font-semibold ${headerColor}`}>
-        <div className="flex items-center gap-1.5 truncate">
+    <div
+      className={`w-72 rounded-2xl border-2 ${borderColor} bg-white shadow-lg dark:bg-slate-900 overflow-hidden text-xs transition-all hover:shadow-xl`}
+    >
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="!w-3.5 !h-3.5 !bg-indigo-600 !border-2 !border-white dark:!border-slate-900 shadow-md transition-transform hover:scale-125"
+      />
+      <div className={`px-3.5 py-2.5 flex items-center justify-between font-semibold ${headerColor}`}>
+        <div className="flex items-center gap-2 truncate">
           {icon}
-          <span className="truncate">{data.label || "Step"}</span>
+          <span className="truncate text-xs font-bold">{data.label || "Step"}</span>
         </div>
+        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-black/20 text-white shrink-0">
+          {badgeLabel}
+        </span>
       </div>
-      <div className="p-2.5 space-y-1 text-slate-600 dark:text-slate-300">
-        <p className="text-[11px] leading-tight line-clamp-2">{data.description || "Processes workflow payload"}</p>
+      <div className="p-3.5 space-y-2 text-slate-600 dark:text-slate-300">
+        <p className="text-xs leading-snug line-clamp-2">
+          {data.description || "Processes workflow step payload and passes to next node."}
+        </p>
+
         {data.threshold !== undefined && (
-          <div className="mt-1 flex items-center justify-between rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            <span>Threshold</span>
-            <span>{data.threshold}%</span>
+          <div className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-300">
+            <span>Score Threshold</span>
+            <span className="font-bold">{data.threshold}%</span>
           </div>
         )}
+
+        {data.tone && (
+          <div className="flex items-center justify-between rounded-lg bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/50 px-2 py-1 text-xs font-medium text-sky-800 dark:text-sky-300">
+            <span>Tone</span>
+            <span className="font-bold uppercase">{data.tone}</span>
+          </div>
+        )}
+
+        <div className="pt-1.5 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-800">
+          <span className="font-mono text-[10px]">ID: {id}</span>
+          <span className="text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-1">
+            <Sliders size={11} /> Configured
+          </span>
+        </div>
       </div>
-      <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-indigo-500" />
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="!w-3.5 !h-3.5 !bg-indigo-600 !border-2 !border-white dark:!border-slate-900 shadow-md transition-transform hover:scale-125"
+      />
     </div>
   );
 }
@@ -198,26 +238,116 @@ export default function ApplyStudio() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] = useState<AutomationWorkflow | null>(null);
   const [executionLogs, setExecutionLogs] = useState<WorkflowExecution | null>(null);
+  const [panelTab, setPanelTab] = useState<"add" | "edit" | "settings">("add");
 
-  useEffect(() => {
-    fetchApplyMetrics();
-    fetchJobPosters();
-    fetchWorkflows();
-  }, []);
+  const edgeOptions = {
+    type: "smoothstep",
+    animated: true,
+    style: {
+      stroke: "#6366f1",
+      strokeWidth: 3.5,
+    },
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      color: "#6366f1",
+      width: 22,
+      height: 22,
+    },
+  };
 
-  // Sync active workflow to React Flow canvas
-  useEffect(() => {
-    if (workflows.length > 0 && !selectedWorkflow) {
-      const activeWf = workflows[0];
-      setSelectedWorkflow(activeWf);
-      if (activeWf.nodes && activeWf.nodes.length > 0) {
-        setNodes(activeWf.nodes);
-        setEdges(activeWf.edges);
-      }
+  const onConnect = useCallback(
+    (connection: Connection) =>
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...connection,
+            type: "smoothstep",
+            animated: true,
+            style: { stroke: "#6366f1", strokeWidth: 3.5 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#6366f1", width: 22, height: 22 },
+          },
+          eds
+        )
+      ),
+    [setEdges]
+  );
+
+  // Auto layout into clean organized 4x2 grid
+  const handleTidyLayout = () => {
+    const nodeWidth = 320;
+    const nodeHeight = 180;
+    const gapX = 80;
+    const gapY = 120;
+    const cols = 4;
+
+    setNodes((current) =>
+      current.map((n, i) => {
+        const row = Math.floor(i / cols);
+        const colInRow = i % cols;
+        const col = row % 2 === 0 ? colInRow : cols - 1 - colInRow;
+        return {
+          ...n,
+          position: {
+            x: 60 + col * (nodeWidth + gapX),
+            y: 60 + row * (nodeHeight + gapY),
+          },
+        };
+      })
+    );
+    toast("Pipeline organized into clean layout!");
+  };
+
+  // Add node from library
+  const handleAddNode = (category: string, label: string, type: string, extraData: any = {}) => {
+    const newId = `node-${Date.now()}`;
+    const lastNode = nodes.length > 0 ? nodes[nodes.length - 1] : null;
+    const newPos = lastNode
+      ? { x: lastNode.position.x + 360, y: lastNode.position.y }
+      : { x: 60, y: 60 };
+
+    const newNode: Node = {
+      id: newId,
+      type: type || "analyzeJob",
+      position: newPos,
+      data: {
+        label,
+        category,
+        description: extraData.description || `Configured ${label} action`,
+        ...extraData,
+      },
+    };
+
+    setNodes((nds) => [...nds, newNode]);
+
+    const sourceId = selectedNode ? selectedNode.id : (lastNode ? lastNode.id : null);
+    if (sourceId) {
+      const newEdge: Edge = {
+        id: `e-${sourceId}-${newId}`,
+        source: sourceId,
+        target: newId,
+        type: "smoothstep",
+        animated: true,
+        style: { stroke: "#6366f1", strokeWidth: 3.5 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#6366f1", width: 22, height: 22 },
+      };
+      setEdges((eds) => [...eds, newEdge]);
     }
-  }, [workflows]);
 
-  const onConnect = useCallback((connection: Connection) => setEdges((eds) => addEdge(connection, eds)), [setEdges]);
+    setSelectedNode(newNode);
+    setPanelTab("edit");
+    toast(`Added "${label}" to workflow!`);
+  };
+
+  // Delete node
+  const handleDeleteNode = (nodeId: string) => {
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+    if (selectedNode?.id === nodeId) {
+      setSelectedNode(null);
+      setPanelTab("add");
+    }
+    toast("Node removed from workflow");
+  };
 
   // Handle Drag & Drop
   const handleDrag = (e: React.DragEvent) => {
@@ -609,18 +739,28 @@ export default function ApplyStudio() {
 
       {/* --- TAB 2: VISUAL WORKFLOW BUILDER --- */}
       {activeTab === "builder" && (
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 overflow-hidden h-[750px] flex flex-col">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 overflow-hidden h-[820px] flex flex-col">
           {/* Builder Header Toolbar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
             <div className="flex items-center gap-3">
-              <span className="font-bold text-sm flex items-center gap-1.5">
-                <Zap size={16} className="text-indigo-600" />
-                {selectedWorkflow?.name || "Job Application Pipeline"}
+              <span className="font-bold text-sm flex items-center gap-2">
+                <Zap size={18} className="text-indigo-600" />
+                {selectedWorkflow?.name || "Automatic Job Application Pipeline"}
               </span>
               <Badge v={selectedWorkflow?.is_active ? "connected" : "waiting"} />
+              <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
+                {nodes.length} Nodes • {edges.length} Wires
+              </span>
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleTidyLayout}
+                className="btn text-xs py-1.5 px-3 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                title="Automatically organize nodes into clean 2-row layout"
+              >
+                <LayoutGrid size={13} className="text-indigo-500" /> Auto Tidy Grid
+              </button>
               <button
                 onClick={() => {
                   if (selectedWorkflow) {
@@ -658,158 +798,414 @@ export default function ApplyStudio() {
                     });
                   }
                 }}
-                className="btn btn-primary text-xs py-1.5 px-4 font-semibold"
+                className="btn btn-primary text-xs py-1.5 px-4 font-semibold shadow-sm"
               >
                 Save Workflow
               </button>
             </div>
           </div>
 
-          {/* Builder Canvas Area */}
-          <div className="flex-1 relative">
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              nodeTypes={nodeTypes}
-              onNodeClick={(_, node) => setSelectedNode(node)}
-              fitView
-              className="bg-slate-100 dark:bg-slate-950"
-            >
-              <Background gap={16} size={1} />
-              <Controls />
-              <MiniMap
-                nodeColor={() => "#6366f1"}
-                className="!bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm"
-              />
+          {/* Builder Body: Split Canvas & Node Manager Sidebar */}
+          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+            {/* Left: Main Interactive ReactFlow Canvas */}
+            <div className="flex-1 h-full relative">
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                nodeTypes={nodeTypes}
+                defaultEdgeOptions={edgeOptions}
+                onNodeClick={(_, node) => {
+                  setSelectedNode(node);
+                  setPanelTab("edit");
+                }}
+                fitView
+                className="bg-slate-100 dark:bg-slate-950"
+              >
+                <Background gap={22} size={1.5} color="#6366f120" />
+                <Controls className="!bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm" />
+                <MiniMap
+                  nodeColor={() => "#6366f1"}
+                  className="!bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm"
+                />
+              </ReactFlow>
+            </div>
 
-              {/* Node Palette floating panel */}
-              <Panel position="top-left" className="bg-white/95 dark:bg-slate-900/95 p-2 rounded-xl border border-slate-200 dark:border-slate-800 shadow-md backdrop-blur-xs">
-                <span className="text-[11px] font-bold text-slate-500 uppercase px-1">Node Palette</span>
-                <div className="grid grid-cols-2 gap-1.5 mt-1.5">
-                  <button
-                    onClick={() => {
-                      const id = `node-${Date.now()}`;
-                      setNodes((nds) => [
-                        ...nds,
-                        {
-                          id,
-                          type: "trigger",
-                          position: { x: 100, y: 100 },
-                          data: { label: "Trigger: Job Upload", category: "trigger", description: "Fires on new poster" }
-                        }
-                      ]);
-                    }}
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-medium hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-800"
-                  >
-                    <Upload size={12} className="text-emerald-500" /> Trigger
-                  </button>
-                  <button
-                    onClick={() => {
-                      const id = `node-${Date.now()}`;
-                      setNodes((nds) => [
-                        ...nds,
-                        {
-                          id,
-                          type: "analyzeJob",
-                          position: { x: 250, y: 100 },
-                          data: { label: "AI Vision Extraction", category: "ai", description: "Extracts fields & HR" }
-                        }
-                      ]);
-                    }}
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-medium hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-800"
-                  >
-                    <Sparkles size={12} className="text-indigo-500" /> AI Vision
-                  </button>
-                  <button
-                    onClick={() => {
-                      const id = `node-${Date.now()}`;
-                      setNodes((nds) => [
-                        ...nds,
-                        {
-                          id,
-                          type: "matchResume",
-                          position: { x: 400, y: 100 },
-                          data: { label: "Resume Matcher", category: "resume", description: "5-factor scoring" }
-                        }
-                      ]);
-                    }}
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-medium hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-800"
-                  >
-                    <FileCheck size={12} className="text-purple-500" /> Resume Match
-                  </button>
-                  <button
-                    onClick={() => {
-                      const id = `node-${Date.now()}`;
-                      setNodes((nds) => [
-                        ...nds,
-                        {
-                          id,
-                          type: "condition",
-                          position: { x: 550, y: 100 },
-                          data: { label: "Safety Gate", category: "condition", threshold: 75, description: "Check match >= 75%" }
-                        }
-                      ]);
-                    }}
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-medium hover:bg-slate-100 dark:border-slate-800 dark:hover:bg-slate-800"
-                  >
-                    <ShieldCheck size={12} className="text-amber-500" /> Condition
-                  </button>
-                </div>
-              </Panel>
+            {/* Right: Dedicated Node Control Center Sidebar */}
+            <div className="w-full lg:w-96 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-800 flex flex-col bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-xs h-full">
+              {/* Tab Navigation */}
+              <div className="flex border-b border-slate-200 dark:border-slate-800 text-xs font-semibold bg-white dark:bg-slate-900">
+                <button
+                  onClick={() => setPanelTab("add")}
+                  className={`flex-1 py-2.5 px-3 flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
+                    panelTab === "add"
+                      ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20"
+                      : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                  }`}
+                >
+                  <Plus size={14} /> Add Nodes
+                </button>
+                <button
+                  onClick={() => setPanelTab("edit")}
+                  className={`flex-1 py-2.5 px-3 flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
+                    panelTab === "edit"
+                      ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20"
+                      : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                  }`}
+                >
+                  <Sliders size={14} /> Edit Node {selectedNode ? `✓` : ""}
+                </button>
+                <button
+                  onClick={() => setPanelTab("settings")}
+                  className={`flex-1 py-2.5 px-3 flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
+                    panelTab === "settings"
+                      ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20"
+                      : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                  }`}
+                >
+                  <Settings size={14} /> Settings
+                </button>
+              </div>
 
-              {/* Node Inspector Floating Panel */}
-              {selectedNode && (
-                <Panel position="top-right" className="w-72 bg-white/95 dark:bg-slate-900/95 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg text-xs backdrop-blur-xs space-y-2">
-                  <div className="flex items-center justify-between font-bold border-b border-slate-200 dark:border-slate-800 pb-1.5">
-                    <span>Configure Node</span>
-                    <button onClick={() => setSelectedNode(null)} className="text-slate-400 hover:text-slate-600">
-                      <X size={14} />
-                    </button>
+              {/* Panel Content */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+                {/* --- TAB 1: ADD NODE PALETTE --- */}
+                {panelTab === "add" && (
+                  <div className="space-y-4">
+                    <p className="text-[11px] text-slate-500">
+                      Click <strong>+ Add</strong> on any node below to append it to your workflow canvas and wire it up:
+                    </p>
+
+                    {/* Category: Triggers */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-600 flex items-center gap-1">
+                        <Upload size={12} /> Trigger Nodes
+                      </span>
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
+                        <div>
+                          <p className="font-bold text-xs">Job Poster Uploaded</p>
+                          <p className="text-[11px] text-slate-400">Triggers on image or PDF upload</p>
+                        </div>
+                        <button
+                          onClick={() => handleAddNode("trigger", "Job Poster Uploaded", "trigger", { description: "Triggers on image or PDF upload" })}
+                          className="btn text-xs py-1 px-2.5 bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-400"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
+                        <div>
+                          <p className="font-bold text-xs">Manual Trigger</p>
+                          <p className="text-[11px] text-slate-400">Run workflow manually on demand</p>
+                        </div>
+                        <button
+                          onClick={() => handleAddNode("trigger", "Manual Trigger", "trigger", { description: "Runs pipeline on manual trigger" })}
+                          className="btn text-xs py-1 px-2.5 bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-400"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Category: AI Nodes */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-600 flex items-center gap-1">
+                        <Sparkles size={12} /> AI Processing Nodes
+                      </span>
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
+                        <div>
+                          <p className="font-bold text-xs">AI Vision Extraction</p>
+                          <p className="text-[11px] text-slate-400">Extracts Company, Role & HR Email</p>
+                        </div>
+                        <button
+                          onClick={() => handleAddNode("ai", "AI Vision Extraction", "analyzeJob", { description: "Extracts Company, Role, Skills & HR Email" })}
+                          className="btn text-xs py-1 px-2.5 bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-400"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
+                        <div>
+                          <p className="font-bold text-xs">Generate Job Description</p>
+                          <p className="text-[11px] text-slate-400">Builds structured Markdown JD</p>
+                        </div>
+                        <button
+                          onClick={() => handleAddNode("ai", "Generate Job Description", "generateJd", { description: "Builds structured Markdown JD" })}
+                          className="btn text-xs py-1 px-2.5 bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-400"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
+                        <div>
+                          <p className="font-bold text-xs">AI Email Drafter</p>
+                          <p className="text-[11px] text-slate-400">Personalized application email</p>
+                        </div>
+                        <button
+                          onClick={() => handleAddNode("email", "AI Email Drafter", "generateEmail", { tone: "formal", description: "Personalized application email" })}
+                          className="btn text-xs py-1 px-2.5 bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-950 dark:text-indigo-400"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Category: Resume Matching */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-purple-600 flex items-center gap-1">
+                        <FileCheck size={12} /> Resume Matching Nodes
+                      </span>
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
+                        <div>
+                          <p className="font-bold text-xs">Match Best Resume</p>
+                          <p className="text-[11px] text-slate-400">5-Factor weighted resume scoring</p>
+                        </div>
+                        <button
+                          onClick={() => handleAddNode("resume", "Match Best Resume", "matchResume", { description: "5-Factor Weighted Scoring Engine" })}
+                          className="btn text-xs py-1 px-2.5 bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100 dark:bg-purple-950 dark:text-purple-400"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Category: Safety & Condition */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-amber-600 flex items-center gap-1">
+                        <ShieldCheck size={12} /> Safety & Condition Nodes
+                      </span>
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
+                        <div>
+                          <p className="font-bold text-xs">Safety Gate Check</p>
+                          <p className="text-[11px] text-slate-400">Checks Score & HR Email presence</p>
+                        </div>
+                        <button
+                          onClick={() => handleAddNode("condition", "Safety Gate Check", "condition", { threshold: 75, description: "Score >= 75% & Valid HR Email" })}
+                          className="btn text-xs py-1 px-2.5 bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-400"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Category: Email Actions */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-sky-600 flex items-center gap-1">
+                        <Mail size={12} /> Email & Delivery Nodes
+                      </span>
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
+                        <div>
+                          <p className="font-bold text-xs">Send via Gmail</p>
+                          <p className="text-[11px] text-slate-400">Dispatches email with resume</p>
+                        </div>
+                        <button
+                          onClick={() => handleAddNode("email", "Send via Gmail", "sendGmail", { description: "Sends email with resume MIME attachment" })}
+                          className="btn text-xs py-1 px-2.5 bg-sky-50 text-sky-600 border-sky-200 hover:bg-sky-100 dark:bg-sky-950 dark:text-sky-400"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Category: Tracking */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-rose-600 flex items-center gap-1">
+                        <CheckCircle2 size={12} /> Tracking & Lifecycle Nodes
+                      </span>
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-2.5 flex items-center justify-between shadow-xs">
+                        <div>
+                          <p className="font-bold text-xs">Track Application</p>
+                          <p className="text-[11px] text-slate-400">Saves to Application Tracker</p>
+                        </div>
+                        <button
+                          onClick={() => handleAddNode("tracking", "Track Application", "saveApplication", { description: "Logs application & monitors replies" })}
+                          className="btn text-xs py-1 px-2.5 bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950 dark:text-rose-400"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-semibold text-slate-500">Node Label</label>
-                    <input
-                      className="input py-1 text-xs w-full mt-0.5"
-                      value={typeof selectedNode.data?.label === "string" ? selectedNode.data.label : ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setNodes((nds) =>
-                          nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...n.data, label: val } } : n))
-                        );
-                      }}
-                    />
+                )}
+
+                {/* --- TAB 2: EDIT SELECTED NODE --- */}
+                {panelTab === "edit" && (
+                  <div className="space-y-4">
+                    {!selectedNode ? (
+                      <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center text-slate-400">
+                        <Sliders size={24} className="mx-auto mb-2 opacity-50" />
+                        <p className="font-semibold text-xs text-slate-600 dark:text-slate-300">No node selected</p>
+                        <p className="text-[11px] mt-1">Click any node on the canvas to edit its properties or delete it.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3.5">
+                        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-600">
+                              Selected Node
+                            </span>
+                            <p className="font-bold text-sm text-slate-900 dark:text-white">
+                              {String(selectedNode.data?.label || selectedNode.id)}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setSelectedNode(null)}
+                            className="text-slate-400 hover:text-slate-600"
+                            title="Deselect"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+
+                        {/* Node Label */}
+                        <div>
+                          <label className="text-[10px] uppercase font-bold text-slate-500">Node Title / Label</label>
+                          <input
+                            className="input w-full mt-1 text-xs py-1.5"
+                            value={typeof selectedNode.data?.label === "string" ? selectedNode.data.label : ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setNodes((nds) =>
+                                nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...n.data, label: val } } : n))
+                              );
+                            }}
+                          />
+                        </div>
+
+                        {/* Node Description */}
+                        <div>
+                          <label className="text-[10px] uppercase font-bold text-slate-500">Step Description</label>
+                          <textarea
+                            rows={3}
+                            className="input w-full mt-1 text-xs"
+                            value={typeof selectedNode.data?.description === "string" ? selectedNode.data.description : ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setNodes((nds) =>
+                                nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...n.data, description: val } } : n))
+                              );
+                            }}
+                          />
+                        </div>
+
+                        {/* Condition Threshold Config */}
+                        {selectedNode.data?.threshold !== undefined && (
+                          <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                                Match Score Threshold
+                              </label>
+                              <span className="text-xs font-bold font-mono text-amber-900 dark:text-amber-200">
+                                {String(selectedNode.data.threshold)}%
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="30"
+                              max="95"
+                              step="5"
+                              className="w-full accent-amber-600"
+                              value={typeof selectedNode.data.threshold === "number" ? selectedNode.data.threshold : 75}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 75;
+                                setNodes((nds) =>
+                                  nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...n.data, threshold: val } } : n))
+                                );
+                              }}
+                            />
+                            <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                              Applications with a match score below {String(selectedNode.data.threshold)}% will be paused for manual review.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Email Tone Config */}
+                        {selectedNode.data?.tone !== undefined && (
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-slate-500">Email Tone</label>
+                            <select
+                              className="input w-full mt-1 text-xs py-1.5"
+                              value={String(selectedNode.data.tone || "formal")}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setNodes((nds) =>
+                                  nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...n.data, tone: val } } : n))
+                                );
+                              }}
+                            >
+                              <option value="formal">Formal & Professional</option>
+                              <option value="friendly">Warm & Enthusiastic</option>
+                              <option value="concise">Short & Direct</option>
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Node Actions */}
+                        <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                          <button
+                            onClick={() => handleDeleteNode(selectedNode.id)}
+                            className="w-full btn bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-900 py-2 flex items-center justify-center gap-1.5 font-bold"
+                          >
+                            <Trash2 size={13} /> Remove Node From Canvas
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {selectedNode.data?.threshold !== undefined && (
+                )}
+
+                {/* --- TAB 3: WORKFLOW SETTINGS --- */}
+                {panelTab === "settings" && (
+                  <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] uppercase font-semibold text-slate-500">Minimum Match Score Threshold</label>
+                      <label className="text-[10px] uppercase font-bold text-slate-500">Pipeline Name</label>
                       <input
-                        type="number"
-                        className="input py-1 text-xs w-full mt-0.5"
-                        value={typeof selectedNode.data.threshold === "number" ? selectedNode.data.threshold : 70}
+                        className="input w-full mt-1 text-xs py-1.5"
+                        value={selectedWorkflow?.name || ""}
                         onChange={(e) => {
-                          const val = parseInt(e.target.value) || 70;
-                          setNodes((nds) =>
-                            nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...n.data, threshold: val } } : n))
-                          );
+                          if (selectedWorkflow) {
+                            setSelectedWorkflow({ ...selectedWorkflow, name: e.target.value });
+                          }
                         }}
                       />
                     </div>
-                  )}
-                  <button
-                    onClick={() => {
-                      setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id));
-                      setSelectedNode(null);
-                    }}
-                    className="w-full text-rose-600 border border-rose-200 dark:border-rose-900 rounded py-1 hover:bg-rose-50 dark:hover:bg-rose-950 flex items-center justify-center gap-1 font-semibold"
-                  >
-                    <Trash2 size={12} /> Remove Node
-                  </button>
-                </Panel>
-              )}
-            </ReactFlow>
+
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs">Auto-Send via Gmail</span>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                          checked={selectedWorkflow?.settings?.auto_send || false}
+                          onChange={(e) => {
+                            if (selectedWorkflow) {
+                              setSelectedWorkflow({
+                                ...selectedWorkflow,
+                                settings: { ...selectedWorkflow.settings, auto_send: e.target.checked }
+                              });
+                            }
+                          }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-tight">
+                        When enabled, applications meeting the minimum match threshold will be sent automatically.
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                      <button
+                        onClick={handleTidyLayout}
+                        className="btn w-full text-xs py-2 flex items-center justify-center gap-2 border-slate-200 dark:border-slate-700"
+                      >
+                        <LayoutGrid size={14} className="text-indigo-500" /> Tidy / Auto-Layout Canvas
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
