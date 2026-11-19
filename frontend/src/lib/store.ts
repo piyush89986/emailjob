@@ -197,8 +197,19 @@ export interface S {
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
 
+const getInitialUser = (): { name: string; email: string } | null => {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem("jobmail_user");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
 const emptyState = (): S => ({
-  user: null,
+  user: getInitialUser(),
   dark: false,
   draft: null,
   toasts: [],
@@ -249,8 +260,13 @@ export const isMockMode = () => import.meta.env.VITE_USE_MOCK === "true";
 
 // --- Auth ---
 export async function login(email: string, password?: string) {
+  const fallbackUser = { name: email.split("@")[0], email };
+  if (typeof window !== "undefined") {
+    localStorage.setItem("jobmail_user", JSON.stringify(fallbackUser));
+  }
+  set(() => ({ user: fallbackUser }));
+
   if (isMockMode()) {
-    set(() => ({ user: { name: email.split("@")[0], email } }));
     return;
   }
   const res = await api.post("/auth/login", { email, password: password || "" });
@@ -260,8 +276,13 @@ export async function login(email: string, password?: string) {
 }
 
 export async function signup(email: string, password: string, name: string, org?: string) {
+  const fallbackUser = { name: name || email.split("@")[0], email };
+  if (typeof window !== "undefined") {
+    localStorage.setItem("jobmail_user", JSON.stringify(fallbackUser));
+  }
+  set(() => ({ user: fallbackUser }));
+
   if (isMockMode()) {
-    set(() => ({ user: { name: name || email.split("@")[0], email } }));
     return;
   }
   const res = await api.post("/auth/signup", {
@@ -277,11 +298,14 @@ export async function signup(email: string, password: string, name: string, org?
 
 export function logout() {
   tokens.clear();
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("jobmail_user");
+  }
   if (sseSource) {
     sseSource.close();
     sseSource = null;
   }
-  set(() => emptyState());
+  set(() => ({ ...emptyState(), user: null }));
 }
 
 // --- Data Hydration ---
@@ -301,8 +325,25 @@ export async function loadInitialData() {
       api.get("/role-resumes"),
     ]);
 
+    // Check if auth failed
+    if (meRes.status === "rejected") {
+      const errStatus = (meRes.reason as any)?.response?.status;
+      if (errStatus === 401 && !tokens.refresh) {
+        logout();
+        return;
+      }
+    }
+
+    const resolvedUser = meRes.status === "fulfilled"
+      ? { name: meRes.value.data.name, email: meRes.value.data.email }
+      : state.user;
+
+    if (resolvedUser && typeof window !== "undefined") {
+      localStorage.setItem("jobmail_user", JSON.stringify(resolvedUser));
+    }
+
     set((s) => ({
-      user: meRes.status === "fulfilled" ? { name: meRes.value.data.name, email: meRes.value.data.email } : s.user,
+      user: resolvedUser || s.user,
       contacts: contactsRes.status === "fulfilled" ? contactsRes.value.data : s.contacts,
       threads: threadsRes.status === "fulfilled" ? threadsRes.value.data : s.threads,
       templates: tplsRes.status === "fulfilled" ? tplsRes.value.data : s.templates,

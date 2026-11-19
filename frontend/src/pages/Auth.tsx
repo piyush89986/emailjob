@@ -1,12 +1,20 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { login, signup } from "@/lib/store";
+import { login, signup, useS } from "@/lib/store";
+import { tokens } from "@/api/client";
 
 export default function Auth({ mode }: { mode: "login" | "signup" }) {
   const nav = useNavigate();
+  const user = useS((s) => s.user);
   const [f, setF] = useState({ name: "", email: "", password: "", org: "" });
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (user || tokens.access) {
+      nav("/", { replace: true });
+    }
+  }, [user, nav]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();

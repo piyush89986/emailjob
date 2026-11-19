@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "@/components/Layout";
@@ -12,10 +12,37 @@ import Applications from "@/pages/Applications";
 import ApplyStudio from "@/pages/ApplyStudio";
 import ResumeBuilder from "@/pages/ResumeBuilder";
 import Settings from "@/pages/Settings";
-import { useS } from "@/lib/store";
+import { useS, loadInitialData } from "@/lib/store";
+import { tokens } from "@/api/client";
 import "./index.css";
 
-function Protected({ children }: { children: JSX.Element }) { const user = useS((s) => s.user); return user ? children : <Navigate to="/login" replace />; }
+function Protected({ children }: { children: JSX.Element }) {
+  const user = useS((s) => s.user);
+  const [checking, setChecking] = useState(!user && Boolean(tokens.access));
+
+  useEffect(() => {
+    if (!user && tokens.access) {
+      loadInitialData().finally(() => {
+        setChecking(false);
+      });
+    } else {
+      setChecking(false);
+    }
+  }, [user]);
+
+  if (checking) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-7 w-7 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+          <p className="text-xs font-medium text-slate-500">Restoring session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return user || tokens.access ? children : <Navigate to="/login" replace />;
+}
 
 function App() {
   return (

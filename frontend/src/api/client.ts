@@ -36,7 +36,16 @@ api.interceptors.response.use(
   (r) => r,
   async (err: AxiosError) => {
     const cfg = err.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
-    if (err.response?.status === 401 && cfg && !cfg._retry && tokens.refresh) {
+    if (err.response?.status === 401 && cfg && !cfg._retry) {
+      if (!tokens.refresh) {
+        tokens.clear();
+        localStorage.removeItem("jobmail_user");
+        if (window.location.pathname !== "/login" && window.location.pathname !== "/signup") {
+          window.location.href = "/login";
+        }
+        return Promise.reject(err);
+      }
+
       cfg._retry = true;
       try {
         refreshing ??= axios.post(`${getApiBaseUrl()}/auth/refresh`, { refresh_token: tokens.refresh })
@@ -52,6 +61,7 @@ api.interceptors.response.use(
         return api(cfg);
       } catch {
         tokens.clear();
+        localStorage.removeItem("jobmail_user");
         if (window.location.pathname !== "/login" && window.location.pathname !== "/signup") {
           window.location.href = "/login";
         }
