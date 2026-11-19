@@ -256,9 +256,20 @@ const getInitialUser = (): { name: string; email: string } | null => {
   }
 };
 
+export const getInitialDark = (): boolean => {
+  if (typeof window === "undefined") return false;
+  const stored = localStorage.getItem("jobmail_theme");
+  if (stored) {
+    return stored === "dark";
+  }
+  return typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-color-scheme: dark)").matches
+    : false;
+};
+
 const emptyState = (): S => ({
   user: getInitialUser(),
-  dark: false,
+  dark: getInitialDark(),
   draft: null,
   toasts: [],
   resumes: [],
@@ -296,6 +307,9 @@ const emptyState = (): S => ({
 });
 
 let state: S = emptyState();
+if (typeof window !== "undefined") {
+  document.documentElement.classList.toggle("dark", state.dark);
+}
 const subs = new Set<() => void>();
 export const getState = () => state;
 export const set = (fn: (s: S) => Partial<S>) => { state = { ...state, ...fn(state) }; subs.forEach((s) => s()); };
@@ -356,7 +370,11 @@ export function logout() {
     sseSource.close();
     sseSource = null;
   }
-  set(() => ({ ...emptyState(), user: null }));
+  const savedDark = getInitialDark();
+  set(() => ({ ...emptyState(), user: null, dark: savedDark }));
+  if (typeof window !== "undefined") {
+    document.documentElement.classList.toggle("dark", savedDark);
+  }
 }
 
 // --- Data Hydration ---
@@ -480,7 +498,14 @@ if (typeof window !== "undefined" && tokens.access) {
   loadInitialData();
 }
 
-export function toggleDark() { const d = !state.dark; document.documentElement.classList.toggle("dark", d); set(() => ({ dark: d })); }
+export function toggleDark() {
+  const next = !state.dark;
+  if (typeof window !== "undefined") {
+    localStorage.setItem("jobmail_theme", next ? "dark" : "light");
+    document.documentElement.classList.toggle("dark", next);
+  }
+  set(() => ({ dark: next }));
+}
 
 const sentToday = () => state.threads.flatMap((t) => t.messages).filter((m) => m.dir === "out" && Date.now() - +new Date(m.at) < 864e5).length;
 
