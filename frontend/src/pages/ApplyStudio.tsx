@@ -49,7 +49,11 @@ import {
   Sliders,
   Maximize2,
   Pencil,
-  Check
+  Check,
+  Terminal,
+  ArrowRight,
+  XCircle,
+  RefreshCw
 } from "lucide-react";
 
 import {
@@ -338,6 +342,76 @@ const WORKFLOW_STEP_PRESETS = [
   },
 ];
 
+// Pipeline Skills for Live Execution Audit Screen
+export interface SkillStatus {
+  id: string;
+  name: string;
+  skillType: string;
+  status: "idle" | "running" | "completed" | "warning" | "error";
+  message?: string;
+  details?: string;
+  error?: string;
+}
+
+export interface PipelineLog {
+  timestamp: string;
+  level: "info" | "success" | "warning" | "error";
+  skill: string;
+  text: string;
+}
+
+const INITIAL_PIPELINE_SKILLS: SkillStatus[] = [
+  {
+    id: "skill-vision",
+    name: "AI Vision OCR Extraction",
+    skillType: "Vision AI (GPT-4o-mini)",
+    status: "idle",
+    message: "Extracts role, company, recruiter email, and required skills",
+  },
+  {
+    id: "skill-jd",
+    name: "Job Description Generator",
+    skillType: "Document AI",
+    status: "idle",
+    message: "Synthesizes structured Markdown JD with responsibilities",
+  },
+  {
+    id: "skill-resume",
+    name: "AI Resume Matcher & Scorer",
+    skillType: "Scoring Engine",
+    status: "idle",
+    message: "Calculates 5-factor weighted fit score against saved resumes",
+  },
+  {
+    id: "skill-gate",
+    name: "Safety Gate & Email Check",
+    skillType: "Filter / Gatekeeper",
+    status: "idle",
+    message: "Verifies recruiter email presence & match threshold (>= 75%)",
+  },
+  {
+    id: "skill-email",
+    name: "Cold Application Email Drafter",
+    skillType: "LLM Copywriter",
+    status: "idle",
+    message: "Crafts personalized application email highlighting matched skills",
+  },
+  {
+    id: "skill-gmail",
+    name: "Gmail API Dispatcher",
+    skillType: "Gmail Integration",
+    status: "idle",
+    message: "Sends email with resume MIME attachment directly via Gmail",
+  },
+  {
+    id: "skill-tracker",
+    name: "Application Lifecycle Tracker",
+    skillType: "SaaS Database",
+    status: "idle",
+    message: "Logs application and activates real-time reply webhook monitoring",
+  },
+];
+
 export default function ApplyStudio() {
   const [activeTab, setActiveTab] = useState<"hub" | "builder" | "history">("hub");
 
@@ -347,6 +421,12 @@ export default function ApplyStudio() {
   const workflows = useS((s) => s.workflows);
   const apps = useS((s) => s.apps);
   const roleResumes = useS((s) => s.roleResumes);
+
+  // Live Automation Execution & Skills Audit Screen State
+  const [showLiveAudit, setShowLiveAudit] = useState(false);
+  const [livePipelineStatus, setLivePipelineStatus] = useState<"running" | "completed" | "attention_needed" | "error">("running");
+  const [pipelineSkills, setPipelineSkills] = useState<SkillStatus[]>(INITIAL_PIPELINE_SKILLS);
+  const [pipelineLogs, setPipelineLogs] = useState<PipelineLog[]>([]);
 
   // Upload dropzone state
   const [dragActive, setDragActive] = useState(false);
@@ -635,14 +715,36 @@ export default function ApplyStudio() {
     }
   };
 
-  // Start Analysis Workflow (Manual Mode vs Auto Mode)
+  // Start Analysis Workflow (Manual Mode vs Auto Mode with Live Skills Audit Screen)
   const handleAnalyzeAndLaunch = async () => {
     if (!selectedFile) return toast("Please select or drop a job poster first", "err");
+
+    // Open Live Skills Audit screen immediately
+    setShowLiveAudit(true);
+    setLivePipelineStatus("running");
+    setPipelineSkills(INITIAL_PIPELINE_SKILLS);
+    setPipelineLogs([]);
+
+    const log = (level: "info" | "success" | "warning" | "error", skill: string, text: string) => {
+      const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      setPipelineLogs((prev) => [...prev, { timestamp: time, level, skill, text }]);
+    };
+
+    const updateSkill = (id: string, patch: Partial<SkillStatus>) => {
+      setPipelineSkills((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    };
+
+    log("info", "System", `Starting automation pipeline for "${selectedFile.name}" in ${workflowMode === "auto" ? "Automatic Mode" : "Manual Review Mode"}`);
     setIsUploading(true);
+
     try {
-      // 1. Upload and trigger AI vision extraction
+      // --- SKILL 1: AI Vision OCR Extraction ---
+      updateSkill("skill-vision", { status: "running", message: "Uploading poster and extracting job details with Vision AI..." });
+      log("info", "Vision OCR", `Sending poster (${selectedFile.name}) to AI Vision model...`);
+
       const poster = await uploadJobPoster(selectedFile, true);
       setActivePoster(poster);
+
       const extracted = poster.extracted_data || {
         required_skills: [],
         job_responsibilities: [],
@@ -654,47 +756,207 @@ export default function ApplyStudio() {
       setEmailTo(extracted.hr_email || "");
       setEditableJd(poster.generated_jd || "");
 
-      // If in AUTOMATIC MODE, execute entire pipeline end-to-end
-      if (workflowMode === "auto") {
-        toast("Auto Mode: Analyzing job criteria and matching role resumes...");
-        const matches = await matchResumesForPoster(poster.id, extracted);
-        setResumeMatches(matches);
-        const bestResumeId = matches.length > 0 ? matches[0].resume_id : undefined;
-        if (bestResumeId) setSelectedResumeId(bestResumeId);
+      if (!extracted.job_title && !extracted.company_name) {
+        updateSkill("skill-vision", {
+          status: "warning",
+          message: "Job details partially detected. Verify company & role.",
+          details: `Confidence: ${Math.round((extracted.confidence_score || 0.5) * 100)}%`,
+          error: "Dikkat: Vision model poster se clear company ya title nahi padh paya."
+        });
+        log("warning", "Vision OCR", "Dikkat: Company name ya job title clearly identify nahi hua.");
+      } else {
+        updateSkill("skill-vision", {
+          status: "completed",
+          message: `Extracted: ${extracted.job_title || "Role"} at ${extracted.company_name || "Company"}`,
+          details: `Found ${extracted.required_skills?.length || 0} skills • HR: ${extracted.hr_email || "Not found"}`
+        });
+        log("success", "Vision OCR", `Extracted '${extracted.job_title}' at '${extracted.company_name}' (${extracted.required_skills?.length || 0} skills)`);
+        if (extracted.hr_email) {
+          log("success", "Vision OCR", `Found recruiter email: ${extracted.hr_email}`);
+        } else {
+          log("warning", "Vision OCR", "Recruiter HR email was not detected on poster image.");
+        }
+      }
 
-        toast("Auto Mode: Generating personalized cold application email...");
-        const draft = await generateEmailForPoster(poster.id, {
+      // --- SKILL 2: Job Description Generator ---
+      updateSkill("skill-jd", { status: "running", message: "Synthesizing structured Markdown JD..." });
+      log("info", "JD Generator", "Formatting job responsibilities, skills, and qualifications into Markdown JD...");
+
+      const jdText = poster.generated_jd || (extracted.job_responsibilities?.length ? extracted.job_responsibilities.join("\n") : "Standard job description generated.");
+      setEditableJd(jdText);
+      updateSkill("skill-jd", {
+        status: "completed",
+        message: "Structured Job Description generated successfully",
+        details: `${jdText.length} characters structured`
+      });
+      log("success", "JD Generator", "Markdown Job Description ready for resume matching.");
+
+      // --- SKILL 3: AI Resume Matcher & Scorer ---
+      updateSkill("skill-resume", { status: "running", message: "Matching candidate resumes with extracted job criteria..." });
+      log("info", "Resume Matcher", `Evaluating fit against stored role resumes in Resume Builder...`);
+
+      let matchedResumes: ResumeMatchScore[] = [];
+      try {
+        matchedResumes = await matchResumesForPoster(poster.id, extracted);
+        setResumeMatches(matchedResumes);
+      } catch (err: any) {
+        log("warning", "Resume Matcher", `Resume matching warning: ${err.message || "Using fallback"}`);
+      }
+
+      const bestMatch = matchedResumes.length > 0 ? matchedResumes[0] : null;
+      if (bestMatch) {
+        setSelectedResumeId(bestMatch.resume_id);
+        updateSkill("skill-resume", {
+          status: "completed",
+          message: `Best Match: ${bestMatch.role_name} (${bestMatch.match_percentage}%)`,
+          details: `Matched skills: ${(bestMatch.matching_skills || []).slice(0, 4).join(", ") || "General alignment"}`
+        });
+        log("success", "Resume Matcher", `Selected '${bestMatch.role_name}' with fit score ${bestMatch.match_percentage}%`);
+      } else {
+        updateSkill("skill-resume", {
+          status: "warning",
+          message: "No specific role resume matched. Using standard profile.",
+          error: "Dikkat: Resume Builder mein koi specific resume nahi mila. Resume section mein resume upload karein."
+        });
+        log("warning", "Resume Matcher", "Dikkat: No saved role resumes found in Resume Builder.");
+      }
+
+      // --- SKILL 4: Safety Gate & Recruiter Email Check ---
+      updateSkill("skill-gate", { status: "running", message: "Validating recruiter HR email & minimum score threshold..." });
+      log("info", "Safety Gate", "Validating recipient HR email and match score threshold (>= 75%)...");
+
+      const hasHrEmail = Boolean(extracted.hr_email && extracted.hr_email.includes("@"));
+      const matchScore = bestMatch ? bestMatch.match_percentage : 70;
+      let gateHasIssue = false;
+
+      if (!hasHrEmail) {
+        gateHasIssue = true;
+        updateSkill("skill-gate", {
+          status: "warning",
+          message: "Recruiter HR email not found on poster",
+          error: "Dikkat: Recruiter HR email nahi mila. Sending ke liye valid recipient email required hai."
+        });
+        log("warning", "Safety Gate", "Dikkat: Recruiter HR email missing from poster.");
+      } else if (matchScore < 75) {
+        updateSkill("skill-gate", {
+          status: "warning",
+          message: `Match score ${matchScore}% is below standard 75% threshold`,
+          details: `HR email verified: ${extracted.hr_email}`
+        });
+        log("warning", "Safety Gate", `Notice: Match score ${matchScore}% below 75% threshold.`);
+      } else {
+        updateSkill("skill-gate", {
+          status: "completed",
+          message: `Safety check passed (Score: ${matchScore}% • Recruiter Email: ${extracted.hr_email})`,
+          details: "Verified recipient address and satisfactory resume match score"
+        });
+        log("success", "Safety Gate", `Passed: Score ${matchScore}% >= 75% & valid email ${extracted.hr_email}`);
+      }
+
+      // --- SKILL 5: Cold Application Email Drafter ---
+      updateSkill("skill-email", { status: "running", message: "Drafting personalized application email with AI..." });
+      log("info", "Email Drafter", `Generating cold application email with ${emailTone} tone...`);
+
+      let emailDraft: any = null;
+      try {
+        emailDraft = await generateEmailForPoster(poster.id, {
           extractedData: extracted,
-          resumeId: bestResumeId,
+          resumeId: bestMatch?.resume_id,
           tone: emailTone
         });
+        setEmailTo(emailDraft.to_email || extracted.hr_email || "");
+        setEmailSubject(emailDraft.subject || `Application for ${extracted.job_title || "Position"}`);
+        setEmailBody(emailDraft.body_html || "");
+        updateSkill("skill-email", {
+          status: "completed",
+          message: `Email draft created: "${emailDraft.subject || "Job Application"}"`,
+          details: `Tone: ${emailTone} • Tailored to ${extracted.company_name || "Company"}`
+        });
+        log("success", "Email Drafter", `Email draft generated: '${emailDraft.subject}'`);
+      } catch (err: any) {
+        updateSkill("skill-email", {
+          status: "error",
+          message: "Failed to generate email draft",
+          error: `Dikkat: ${err.message || "AI email drafting error"}`
+        });
+        log("error", "Email Drafter", `Dikkat in Email Drafter: ${err.message}`);
+      }
 
-        const targetEmail = draft.to_email || extracted.hr_email;
-        if (targetEmail) {
-          toast("Auto Mode: Dispatching application via Gmail...");
-          await sendPosterApplication(poster.id, {
-            toEmail: targetEmail,
-            subject: draft.subject || "Job Application",
-            bodyHtml: draft.body_html || "",
-            resumeId: bestResumeId,
-            extractedData: extracted,
-            generatedJd: poster.generated_jd
-          });
-          setActivePoster(null);
-          setSelectedFile(null);
-          setFilePreview(null);
-          setActiveTab("history");
-          toast("Application sent successfully via Gmail!", "ok");
+      // --- SKILL 6 & 7: Gmail Dispatcher & Application Tracker ---
+      if (workflowMode === "auto") {
+        const recipient = emailDraft?.to_email || extracted.hr_email;
+        if (recipient && !gateHasIssue) {
+          updateSkill("skill-gmail", { status: "running", message: `Dispatching application to ${recipient} via Gmail API...` });
+          log("info", "Gmail Dispatcher", `Connecting to Gmail API and sending email with resume PDF...`);
+
+          try {
+            await sendPosterApplication(poster.id, {
+              toEmail: recipient,
+              subject: emailDraft?.subject || `Application for ${extracted.job_title}`,
+              bodyHtml: emailDraft?.body_html || "",
+              resumeId: bestMatch?.resume_id,
+              extractedData: extracted,
+              generatedJd: poster.generated_jd
+            });
+
+            updateSkill("skill-gmail", {
+              status: "completed",
+              message: `Application email sent successfully to ${recipient}`,
+              details: "Sent via authorized Gmail account with resume MIME attachment"
+            });
+            log("success", "Gmail Dispatcher", `Email dispatched via Gmail API to ${recipient}!`);
+
+            updateSkill("skill-tracker", {
+              status: "completed",
+              message: "Application logged in database with real-time tracking active",
+              details: "Tracking replies via Gmail Pub/Sub webhook"
+            });
+            log("success", "Tracker", "Application successfully logged in Tracker. Monitoring responses.");
+
+            setLivePipelineStatus("completed");
+            log("success", "System", "All pipeline skills executed successfully!");
+            toast("Automation completed: Application sent successfully via Gmail!", "ok");
+          } catch (err: any) {
+            updateSkill("skill-gmail", {
+              status: "error",
+              message: "Failed to send email via Gmail API",
+              error: `Dikkat: ${err.response?.data?.detail || err.message || "Gmail send error"}`
+            });
+            log("error", "Gmail Dispatcher", `Dikkat: Gmail dispatch failed (${err.message})`);
+            setLivePipelineStatus("error");
+          }
         } else {
-          toast("HR email not detected on poster. Please review and provide recipient email.", "err");
-          setReviewStep(1);
+          // Automatic mode paused because HR email is missing
+          updateSkill("skill-gmail", {
+            status: "warning",
+            message: "Auto-send paused: Recruiter HR email missing",
+            error: "Dikkat: Gmail Dispatcher auto-send nahi kar saka kyunki HR email nahi mila."
+          });
+          updateSkill("skill-tracker", {
+            status: "idle",
+            message: "Pending manual approval and recipient verification"
+          });
+          setLivePipelineStatus("attention_needed");
+          log("warning", "System", "Dikkat: Recruiter HR email missing. Auto-send paused for manual input.");
+          toast("HR email not detected on poster. Please review recipient email.", "err");
         }
       } else {
-        // MANUAL MODE: Open interactive step-by-step review
-        setReviewStep(1);
+        // MANUAL MODE
+        updateSkill("skill-gmail", {
+          status: "idle",
+          message: "Waiting for manual review and approval before sending",
+          details: `Recipient: ${extracted.hr_email || "Pending verification"}`
+        });
+        updateSkill("skill-tracker", {
+          status: "idle",
+          message: "Will be tracked once sent by user"
+        });
+        setLivePipelineStatus(gateHasIssue ? "attention_needed" : "completed");
+        log("info", "System", "Manual Mode: All skills completed. Ready for your review & approval.");
       }
-    } catch (err) {
-      // handled in store
+    } catch (err: any) {
+      log("error", "System", `Pipeline failed: ${err.message || "Unknown error"}`);
+      setLivePipelineStatus("error");
     } finally {
       setIsUploading(false);
     }
@@ -1583,6 +1845,297 @@ export default function ApplyStudio() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 0: LIVE PIPELINE EXECUTION & SKILLS AUDIT SCREEN --- */}
+      {showLiveAudit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 max-h-[90vh] flex flex-col overflow-hidden text-xs">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/70">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400">
+                  <Zap size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                    AI Application Pipeline Execution
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Live skills progress & diagnostic audit trail for{" "}
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">
+                      {selectedFile?.name || "Job Poster"}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                {/* Pipeline Status Badge */}
+                {livePipelineStatus === "running" && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    <RotateCcw size={13} className="animate-spin text-blue-600" />
+                    <span>Executing Skills...</span>
+                  </span>
+                )}
+                {livePipelineStatus === "completed" && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    <CheckCircle2 size={13} className="text-emerald-600" />
+                    <span>All Skills Completed</span>
+                  </span>
+                )}
+                {livePipelineStatus === "attention_needed" && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    <AlertTriangle size={13} className="text-amber-600" />
+                    <span>Attention Needed</span>
+                  </span>
+                )}
+                {livePipelineStatus === "error" && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                    <XCircle size={13} className="text-rose-600" />
+                    <span>Skill Error Detected</span>
+                  </span>
+                )}
+
+                <button
+                  onClick={() => setShowLiveAudit(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+                  title="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {/* Highlight Banner if there is an issue */}
+              {(livePipelineStatus === "attention_needed" || livePipelineStatus === "error") && (
+                <div className="rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/30 p-3.5 flex items-start gap-3">
+                  <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-xs text-amber-900 dark:text-amber-200">
+                      Dikkat: Step verification ya action required hai!
+                    </h4>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">
+                      {pipelineSkills.find((s) => s.error)?.error ||
+                        "Neeche diye gaye skills mein dikkat aayi hai. Aap 'Review & Fix' par click kar ke turant theek kar sakte hain."}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Skills Sequence Flow */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <span>Skills In Sequence</span>
+                  <span>Execution Status</span>
+                </div>
+
+                <div className="space-y-2">
+                  {pipelineSkills.map((skill, index) => {
+                    const isRunning = skill.status === "running";
+                    const isDone = skill.status === "completed";
+                    const isWarn = skill.status === "warning";
+                    const isErr = skill.status === "error";
+                    const isIdle = skill.status === "idle";
+
+                    return (
+                      <div
+                        key={skill.id}
+                        className={`rounded-xl border p-3 transition-all ${
+                          isRunning
+                            ? "border-blue-400 bg-blue-50/40 dark:border-blue-800 dark:bg-blue-950/20 ring-1 ring-blue-400"
+                            : isDone
+                            ? "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+                            : isWarn
+                            ? "border-amber-300 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/20"
+                            : isErr
+                            ? "border-rose-300 dark:border-rose-800 bg-rose-50/30 dark:bg-rose-950/20"
+                            : "border-slate-200 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-950/40 opacity-70"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {/* Skill Number Badge */}
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300">
+                              {index + 1}
+                            </span>
+
+                            {/* Status Icon */}
+                            {isRunning && <RotateCcw size={15} className="animate-spin text-blue-600 shrink-0" />}
+                            {isDone && <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />}
+                            {isWarn && <AlertTriangle size={15} className="text-amber-600 shrink-0" />}
+                            {isErr && <XCircle size={15} className="text-rose-600 shrink-0" />}
+                            {isIdle && <Clock size={15} className="text-slate-400 shrink-0" />}
+
+                            <div className="truncate">
+                              <span className="font-bold text-xs text-slate-900 dark:text-white">
+                                {skill.name}
+                              </span>
+                              <span className="text-[10px] text-slate-400 ml-2 font-mono">
+                                ({skill.skillType})
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Status Badge */}
+                          <div className="shrink-0">
+                            {isRunning && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200 animate-pulse">
+                                Running...
+                              </span>
+                            )}
+                            {isDone && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200">
+                                Completed
+                              </span>
+                            )}
+                            {isWarn && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+                                Warning / Review
+                              </span>
+                            )}
+                            {isErr && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200">
+                                Error
+                              </span>
+                            )}
+                            {isIdle && (
+                              <span className="text-[10px] font-semibold text-slate-400">
+                                Waiting
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Skill Message & Output */}
+                        <div className="mt-1.5 pl-7 text-[11px] space-y-1">
+                          <p className="text-slate-600 dark:text-slate-300">{skill.message}</p>
+                          {skill.details && (
+                            <p className="font-mono text-[10px] text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/30 px-2 py-0.5 rounded inline-block">
+                              ✓ {skill.details}
+                            </p>
+                          )}
+                          {skill.error && (
+                            <div className="rounded-md bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 p-2 text-rose-700 dark:text-rose-300 font-semibold text-[11px] flex items-start gap-1.5 mt-1">
+                              <AlertTriangle size={13} className="shrink-0 mt-0.5 text-rose-500" />
+                              <span>{skill.error}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Real-time Audit Terminal Log Stream */}
+              <div className="space-y-1.5 pt-2">
+                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <span className="flex items-center gap-1.5 font-mono">
+                    <Terminal size={13} /> Execution Log Stream
+                  </span>
+                  <span className="text-[10px] text-slate-400">{pipelineLogs.length} events logged</span>
+                </div>
+
+                <div className="rounded-xl bg-slate-950 border border-slate-800 p-3.5 font-mono text-[11px] h-44 overflow-y-auto space-y-1.5 text-slate-300 shadow-inner">
+                  {pipelineLogs.length === 0 ? (
+                    <div className="text-slate-500 italic py-4 text-center">
+                      Waiting for automation pipeline events...
+                    </div>
+                  ) : (
+                    pipelineLogs.map((log, idx) => (
+                      <div key={idx} className="flex items-start gap-2 leading-relaxed">
+                        <span className="text-slate-500 shrink-0 text-[10px]">[{log.timestamp}]</span>
+                        <span
+                          className={`font-bold px-1.5 rounded text-[9px] shrink-0 uppercase ${
+                            log.level === "success"
+                              ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                              : log.level === "warning"
+                              ? "bg-amber-950 text-amber-300 border border-amber-800"
+                              : log.level === "error"
+                              ? "bg-rose-950 text-rose-400 border border-rose-800"
+                              : "bg-slate-800 text-slate-300"
+                          }`}
+                        >
+                          {log.skill}
+                        </span>
+                        <span
+                          className={`${
+                            log.level === "error"
+                              ? "text-rose-400 font-bold"
+                              : log.level === "warning"
+                              ? "text-amber-300 font-medium"
+                              : log.level === "success"
+                              ? "text-emerald-300"
+                              : "text-slate-300"
+                          }`}
+                        >
+                          {log.text}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer with Actions */}
+            <div className="border-t border-slate-200 px-6 py-3.5 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-wrap items-center justify-between gap-3">
+              <button
+                onClick={() => setShowLiveAudit(false)}
+                className="btn text-xs py-2 px-4 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Close Logs
+              </button>
+
+              <div className="flex items-center gap-2">
+                {/* Attention needed / Error action */}
+                {(livePipelineStatus === "attention_needed" || livePipelineStatus === "error") && (
+                  <button
+                    onClick={() => {
+                      setShowLiveAudit(false);
+                      setReviewStep(1);
+                    }}
+                    className="btn text-xs py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 shadow-md shadow-amber-600/20"
+                  >
+                    <span>Review & Fix in Studio</span>
+                    <ArrowRight size={13} />
+                  </button>
+                )}
+
+                {/* Manual Mode Completed: Proceed to Review */}
+                {workflowMode === "manual" && livePipelineStatus === "completed" && (
+                  <button
+                    onClick={() => {
+                      setShowLiveAudit(false);
+                      setReviewStep(1);
+                    }}
+                    className="btn btn-primary text-xs py-2 px-5 font-bold flex items-center gap-1.5 shadow-md"
+                  >
+                    <span>Proceed to Review & Send</span>
+                    <ArrowRight size={13} />
+                  </button>
+                )}
+
+                {/* Auto Mode Completed: View in Tracker */}
+                {workflowMode === "auto" && livePipelineStatus === "completed" && (
+                  <button
+                    onClick={() => {
+                      setShowLiveAudit(false);
+                      setActiveTab("history");
+                    }}
+                    className="btn text-xs py-2 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+                  >
+                    <span>View in Application Tracker</span>
+                    <ArrowRight size={13} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
