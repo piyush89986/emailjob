@@ -285,6 +285,14 @@ class WorkflowEngine:
                             att_ids = []
                             if best_resume_dict.get("attachment_id"):
                                 att_ids.append(best_resume_dict["attachment_id"])
+                            elif best_resume_dict.get("resume_id"):
+                                att_ids.append(best_resume_dict["resume_id"])
+
+                            # Fallback to user's default or first stored role resume
+                            if not att_ids:
+                                fallback_r = await RoleResume.find_one(RoleResume.tenant_id == tenant_id, RoleResume.is_default == True) or await RoleResume.find_one(RoleResume.tenant_id == tenant_id)
+                                if fallback_r:
+                                    att_ids.append(fallback_r.attachment_id or fallback_r.id)
 
                             msg = await SendingService.enqueue_email_send(
                                 tenant_id=tenant_id,

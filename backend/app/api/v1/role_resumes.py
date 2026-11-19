@@ -93,20 +93,16 @@ async def upload_role_resume(
 
     storage_type = "cloudinary" if cloud_res else "local"
     cloudinary_public_id = cloud_res.get("public_id") if cloud_res else None
-    attachment_id = None
 
-    if cloud_res:
-        url = cloud_res["url"]
-    else:
-        # Fallback to local MongoDB storage
-        att = await StorageService.save_attachment(
-            tenant_id=user.tenant_id,
-            filename=filename,
-            content_type=content_type,
-            data=file_bytes
-        )
-        attachment_id = att.id
-        url = f"/role-resumes/{attachment_id}/file"
+    # Always persist file data in StorageService so raw bytes are available for Gmail MIME attachments
+    att = await StorageService.save_attachment(
+        tenant_id=user.tenant_id,
+        filename=filename,
+        content_type=content_type,
+        data=file_bytes
+    )
+    attachment_id = att.id
+    url = cloud_res["url"] if cloud_res else f"/role-resumes/{attachment_id}/file"
 
     # If is_default, clear previous defaults for this role
     if is_default:

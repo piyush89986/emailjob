@@ -15,6 +15,7 @@ import {
   MarkerType
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { Link } from "react-router-dom";
 import {
   Sparkles,
   Upload,
@@ -525,6 +526,7 @@ export default function ApplyStudio() {
     model?: string;
     templateMatching?: boolean;
     templateId?: string;
+    resumeId?: string;
   }>({
     label: "",
     description: "",
@@ -533,6 +535,7 @@ export default function ApplyStudio() {
     model: "gpt-4o-mini",
     templateMatching: true,
     templateId: "",
+    resumeId: "",
   });
 
   // Clean simple white wires with NO arrows
@@ -589,6 +592,20 @@ export default function ApplyStudio() {
     }
   }, [workflows, selectedWorkflow, setNodes, setEdges]);
 
+  // Pre-load resume matches whenever active poster is selected for review
+  useEffect(() => {
+    if (activePoster) {
+      matchResumesForPoster(activePoster.id, activePoster.extracted_data || editDetails)
+        .then((matches) => {
+          if (matches && matches.length > 0) {
+            setResumeMatches(matches);
+            if (!selectedResumeId) setSelectedResumeId(matches[0].resume_id);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activePoster?.id]);
+
   // Delete node from canvas
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
@@ -611,6 +628,7 @@ export default function ApplyStudio() {
       model: String(node.data?.model || "gpt-4o-mini"),
       templateMatching: node.data?.templateMatching !== false,
       templateId: String(node.data?.templateId || ""),
+      resumeId: String(node.data?.resumeId || ""),
     });
     setDrawerMode("edit");
   }, []);
@@ -632,6 +650,7 @@ export default function ApplyStudio() {
               ...(editFormData.model ? { model: editFormData.model } : {}),
               templateMatching: editFormData.templateMatching !== false,
               ...(editFormData.templateId ? { templateId: editFormData.templateId } : { templateId: "" }),
+              ...(editFormData.resumeId ? { resumeId: editFormData.resumeId } : { resumeId: "" }),
             },
           };
         }
@@ -1090,11 +1109,17 @@ export default function ApplyStudio() {
           log("info", "Gmail Dispatcher", `Connecting to Gmail API and sending email with resume PDF...`);
 
           try {
+            const effectiveResumeId =
+              bestMatch?.resume_id ||
+              selectedResumeId ||
+              (roleResumes.find((r) => r.isDefault)?.id) ||
+              (roleResumes.length > 0 ? roleResumes[0].id : undefined);
+
             await sendPosterApplication(poster.id, {
               toEmail: recipient,
               subject: emailDraft.subject || `Application for ${extracted.job_title}`,
               bodyHtml: emailDraft.body_html,
-              resumeId: bestMatch?.resume_id,
+              resumeId: effectiveResumeId,
               extractedData: extracted,
               generatedJd: poster.generated_jd
             });
@@ -1201,11 +1226,16 @@ export default function ApplyStudio() {
     if (!activePoster || !emailTo) return toast("HR Recipient Email is required", "err");
     setIsProcessing(true);
     try {
+      const effectiveResumeId =
+        selectedResumeId ||
+        (roleResumes.find((r) => r.isDefault)?.id) ||
+        (roleResumes.length > 0 ? roleResumes[0].id : undefined);
+
       await sendPosterApplication(activePoster.id, {
         toEmail: emailTo,
         subject: emailSubject,
         bodyHtml: emailBody,
-        resumeId: selectedResumeId || undefined,
+        resumeId: effectiveResumeId,
         extractedData: editDetails,
         generatedJd: editableJd
       });
@@ -1986,6 +2016,134 @@ export default function ApplyStudio() {
                     </div>
                   </div>
 
+                  {/* Resume Matching & Stored Resumes List (Requirement 3: List of stored role resumes in Match Best Resume settings) */}
+                  {(selectedNode.data?.category === "resume" || selectedNode.type === "matchResume") && (
+                    <div className="space-y-4 rounded-xl border border-purple-200 dark:border-purple-900/50 bg-purple-50/30 dark:bg-purple-950/20 p-4">
+                      {/* Strategy Dropdown */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[11px] uppercase font-bold tracking-wider text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
+                            <Sparkles size={13} className="text-purple-600 dark:text-purple-400" />
+                            <span>Resume Matching Strategy</span>
+                          </label>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300">
+                            5-Factor Weighted Score
+                          </span>
+                        </div>
+                        <select
+                          className="input w-full text-xs py-2 px-3 font-medium"
+                          value={editFormData.resumeId || ""}
+                          onChange={(e) => setEditFormData((prev) => ({ ...prev, resumeId: e.target.value }))}
+                        >
+                          <option value="">✨ Auto-match best role resume (AI 5-Factor Score)</option>
+                          {roleResumes.length > 0 && (
+                            <optgroup label="Or Force a Specific Default Resume:">
+                              {roleResumes.map((r) => (
+                                <option key={r.id} value={r.id}>
+                                  📄 {r.role} ({r.filename}) {r.isDefault ? "★ Default" : ""}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
+                        <p className="text-[11px] text-purple-800 dark:text-purple-300/80 mt-1.5 leading-relaxed">
+                          {!editFormData.resumeId
+                            ? "Candidate ke sabhi uploaded role resumes ko extracted job description (skills, title, experience, responsibilities, education) ke sath evaluate karega aur best match resume select karega."
+                            : "Selected resume will be prioritized as the target attachment for applications."}
+                        </p>
+                      </div>
+
+                      {/* Stored Resumes Visual List (User's uploaded resumes from /resume) */}
+                      <div className="rounded-xl bg-white/80 dark:bg-slate-900/70 border border-purple-100 dark:border-purple-900/40 p-3.5 space-y-2.5">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <FileText size={14} className="text-purple-600 dark:text-purple-400" />
+                            <span>Your Stored Role Resumes ({roleResumes.length})</span>
+                          </span>
+                          <Link
+                            to="/resume"
+                            className="text-[10px] text-purple-600 dark:text-purple-400 hover:underline font-semibold flex items-center gap-0.5"
+                          >
+                            <span>Resume Builder</span>
+                            <ArrowRight size={11} />
+                          </Link>
+                        </div>
+
+                        {roleResumes.length === 0 ? (
+                          <div className="rounded-lg border border-dashed border-amber-300 dark:border-amber-800 p-3 text-center bg-amber-50/50 dark:bg-amber-950/20">
+                            <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium mb-1.5">
+                              No resumes uploaded yet in Resume Builder!
+                            </p>
+                            <Link
+                              to="/resume"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                            >
+                              Upload your role resumes here →
+                            </Link>
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                            {roleResumes.map((r) => {
+                              const isSelected = editFormData.resumeId === r.id;
+                              return (
+                                <div
+                                  key={r.id}
+                                  onClick={() =>
+                                    setEditFormData((prev) => ({
+                                      ...prev,
+                                      resumeId: prev.resumeId === r.id ? "" : r.id,
+                                    }))
+                                  }
+                                  className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all ${
+                                    isSelected
+                                      ? "bg-purple-100/70 dark:bg-purple-950/70 border-purple-400 dark:border-purple-600 shadow-xs"
+                                      : "bg-slate-50 dark:bg-slate-800/60 hover:bg-purple-50/50 dark:hover:bg-purple-950/30 border-slate-200 dark:border-slate-700"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="p-1 rounded bg-purple-100 dark:bg-purple-900/60 text-purple-600 dark:text-purple-300 shrink-0">
+                                      <FileText size={13} />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
+                                          {r.role}
+                                        </span>
+                                        {r.isDefault && (
+                                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                                            Default
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                        {r.filename} {r.sizeBytes ? `• ${(r.sizeBytes / 1024).toFixed(0)} KB` : ""}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="shrink-0 ml-2">
+                                    {isSelected ? (
+                                      <span className="text-[10px] font-bold text-purple-600 dark:text-purple-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-purple-300 dark:border-purple-700">
+                                        Locked
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                                        Auto
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        <div className="pt-1 text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                          💡 Har job application ke liye AI automatic candidate ke sabse relevant resume ko select karta hai aur email me attach karta hai.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Condition / Safety Gate Info */}
                   {(selectedNode.data?.category === "condition" || selectedNode.type === "condition") && (
                     <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 space-y-2">
@@ -2638,7 +2796,7 @@ export default function ApplyStudio() {
               </span>
               <ChevronRight size={14} className="text-slate-300" />
               <span className={`flex items-center gap-1.5 ${reviewStep === 3 ? "text-indigo-600 font-bold" : ""}`}>
-                3. Best Resume ({resumeMatches.length})
+                3. Best Resume ({resumeMatches.length > 0 ? resumeMatches.length : roleResumes.length})
               </span>
               <ChevronRight size={14} className="text-slate-300" />
               <span className={`flex items-center gap-1.5 ${reviewStep === 4 ? "text-indigo-600 font-bold" : ""}`}>
@@ -2760,9 +2918,48 @@ export default function ApplyStudio() {
                     The 5-factor scoring engine evaluated your uploaded resumes. Select your preferred resume below:
                   </p>
                   {resumeMatches.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-amber-300 p-6 text-center text-amber-700 bg-amber-50 dark:bg-amber-950/20">
-                      No matching resumes found. Please upload role resumes in Resume Builder!
-                    </div>
+                    roleResumes.length > 0 ? (
+                      <div className="space-y-2.5">
+                        <div className="p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-[11px] text-indigo-700 dark:text-indigo-300 flex items-center justify-between">
+                          <span>Showing all your uploaded role resumes from Resume Builder:</span>
+                          <span className="font-semibold">{roleResumes.length} available</span>
+                        </div>
+                        {roleResumes.map((r) => (
+                          <div
+                            key={r.id}
+                            onClick={() => setSelectedResumeId(r.id)}
+                            className={`rounded-xl border p-3.5 transition-all cursor-pointer ${
+                              (selectedResumeId === r.id || (!selectedResumeId && r.isDefault))
+                                ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/20 shadow-sm"
+                                : "border-slate-200 hover:border-slate-300 dark:border-slate-800"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  checked={selectedResumeId === r.id || (!selectedResumeId && r.isDefault)}
+                                  onChange={() => setSelectedResumeId(r.id)}
+                                />
+                                <span className="font-bold text-sm">{r.role} Resume</span>
+                                {r.isDefault && (
+                                  <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
+                                    DEFAULT
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs font-semibold text-slate-500">{r.filename}</span>
+                            </div>
+                            {r.notes && <p className="text-xs text-slate-500 mt-1">{r.notes}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-amber-300 p-6 text-center text-amber-700 bg-amber-50 dark:bg-amber-950/20">
+                        <p className="font-bold mb-1">No resumes uploaded yet!</p>
+                        <p className="text-xs">Please upload role resumes in Resume Builder before applying.</p>
+                      </div>
+                    )
                   ) : (
                     <div className="space-y-2.5">
                       {resumeMatches.map((m) => (

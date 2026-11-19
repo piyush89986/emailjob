@@ -395,8 +395,16 @@ async def send_application_endpoint(
     # If resume_id supplied, resolve attachment_id
     if req.resume_id:
         r = await RoleResume.find_one(RoleResume.id == req.resume_id, RoleResume.tenant_id == tenant_id)
-        if r and r.attachment_id:
-            att_ids.append(r.attachment_id)
+        if r:
+            att_ids.append(r.attachment_id or r.id)
+
+    # If no resume attached yet, fallback to user's default or first stored role resume
+    if not att_ids:
+        fallback_r = await RoleResume.find_one(RoleResume.tenant_id == tenant_id, RoleResume.is_default == True) or await RoleResume.find_one(RoleResume.tenant_id == tenant_id)
+        if fallback_r:
+            att_ids.append(fallback_r.attachment_id or fallback_r.id)
+            if not req.resume_id:
+                req.resume_id = fallback_r.id
 
     # Dispatch via Gmail sending service
     msg = await SendingService.enqueue_email_send(
