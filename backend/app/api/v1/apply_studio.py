@@ -21,6 +21,7 @@ from app.services.cloudinary_service import CloudinaryService
 from app.services.resume_matcher import ResumeMatcher, ResumeMatchScore
 from app.services.sending_service import SendingService
 from app.services.storage_service import StorageService
+from app.services.template_matcher import TemplateMatcher
 
 router = APIRouter(prefix="/apply", tags=["apply-studio"])
 log = get_logger("apply_studio_api")
@@ -37,6 +38,7 @@ class MatchResumeRequest(BaseModel):
 class GenerateEmailRequest(BaseModel):
     extracted_data: Optional[Dict[str, Any]] = None
     resume_id: Optional[str] = None
+    template_id: Optional[str] = None
     tone: str = "formal"  # "formal" | "friendly" | "concise"
 
 
@@ -329,7 +331,12 @@ async def generate_email_endpoint(
     req: GenerateEmailRequest,
     user: User = Depends(get_current_user)
 ):
-    """Generate personalized application email draft."""
+    """Generate personalized application email draft.
+    
+    Checks user's saved email templates first for role match.
+    If matched, populates dynamic variables ({{role}}, {{company}}, {{my_name}}, etc.).
+    If no template exists for the role, falls back to AI generation.
+    """
     poster = await _get_poster(poster_id, user.tenant_id)
 
     details = None
@@ -344,13 +351,7 @@ async def generate_email_endpoint(
     if not details:
         raise AppError("Job details not extracted", status_code=400)
 
-    profile = await Profile.find_one(Profile.tenant_id == user.tenant_id)
-    candidate_name = profile.name if profile and profile.name else "Candidate"
-    title = details.job_title or "Open Role"
-    company = details.company_name or "Hiring Team"
-    hr_name = details.hr_name or "Hiring Manager"
-
-    # Get selected resume info
+    # Resolve selected resume info
     resume_name = "Resume"
     resume_attachment_id = None
     if req.resume_id:
@@ -359,19 +360,20 @@ async def generate_email_endpoint(
             resume_name = f"{r.role} Resume"
             resume_attachment_id = r.attachment_id
 
-    # Compose subject and body
-    subject = f"Application for {title} - {candidate_name}"
-    body = f"""<p>Dear {hr_name},</p>
-<p>I am writing to express my strong interest in the <strong>{title}</strong> position at <strong>{company}</strong>.</p>
-<p>Given the requirements outlined for the role, I believe my background aligns well with your team's objectives. Please find my updated resume attached for your review.</p>
-<p>I would welcome the opportunity to discuss how my experience and skill set can contribute to the success of {company}.</p>
-<p>Thank you for your time and consideration.</p>
-<p>Sincerely,<br><strong>{candidate_name}</strong></p>"""
+    # Compose email using Template Matcher (Templates first -> AI fallback)
+    composed = await TemplateMatcher.compose_email(
+        tenant_id=user.tenant_id,
+        job_title=details.job_title or "Open Role",
+        company_name=details.company_name or "Hiring Team",
+        hr_name=details.hr_name,
+        hr_email=details.hr_email,
+        matching_skills=details.required_skills,
+        tone=req.tone,
+        preferred_template_id=req.template_id
+    )
 
     return {
-        "to_email": details.hr_email,
-        "subject": subject,
-        "body_html": body,
+        **composed,
         "resume_name": resume_name,
         "resume_attachment_id": resume_attachment_id
     }

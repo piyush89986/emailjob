@@ -302,17 +302,34 @@ const WORKFLOW_STEP_PRESETS = [
   },
   {
     id: "ai-email",
-    label: "AI Email Drafter",
+    label: "Email Template / AI Drafter",
     category: "email",
     type: "generateEmail",
-    categoryBadge: "AI Generator",
+    categoryBadge: "Smart Drafter",
     icon: <Mail size={18} />,
     iconBg: "bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400",
-    description: "Crafts a high-converting, personalized cold application email.",
+    description: "Matches role template from Email Templates; falls back to AI drafting if not found.",
     extra: {
-      description: "Crafts a personalized application email tailored to recruiter requirements.",
+      description: "Matches role template from Email Templates; falls back to AI drafting if not found.",
       tone: "formal",
-      subjectTemplate: "Application for {{jobTitle}} – {{candidateName}}",
+      templateMatching: true,
+      subjectTemplate: "Application for {{role}} – {{my_name}}",
+    },
+  },
+  {
+    id: "email-template",
+    label: "Email Template",
+    category: "email",
+    type: "generateEmail",
+    categoryBadge: "Template Matcher",
+    icon: <FileText size={18} />,
+    iconBg: "bg-violet-50 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400",
+    description: "Populates a specific or role-matched template from saved Email Templates.",
+    extra: {
+      description: "Matches role template from Email Templates; falls back to AI drafting if not found.",
+      tone: "formal",
+      templateMatching: true,
+      subjectTemplate: "Application for {{role}} – {{my_name}}",
     },
   },
   {
@@ -392,10 +409,10 @@ const INITIAL_PIPELINE_SKILLS: SkillStatus[] = [
   },
   {
     id: "skill-email",
-    name: "Cold Application Email Drafter",
-    skillType: "LLM Copywriter",
+    name: "Email Template / AI Drafter",
+    skillType: "Template Matcher + AI",
     status: "idle",
-    message: "Crafts personalized application email highlighting matched skills",
+    message: "Matches saved role template or drafts personalized cold email via AI",
   },
   {
     id: "skill-gmail",
@@ -422,6 +439,7 @@ export default function ApplyStudio() {
   const workflows = useS((s) => s.workflows);
   const apps = useS((s) => s.apps);
   const roleResumes = useS((s) => s.roleResumes);
+  const savedTemplates = useS((s) => s.templates);
 
   // Live Automation Execution & Skills Audit Screen State
   const [showLiveAudit, setShowLiveAudit] = useState(false);
@@ -492,13 +510,17 @@ export default function ApplyStudio() {
     tone?: string;
     subjectTemplate?: string;
     model?: string;
+    templateMatching?: boolean;
+    templateId?: string;
   }>({
     label: "",
     description: "",
     threshold: 75,
     tone: "formal",
-    subjectTemplate: "Application for {{jobTitle}} – {{candidateName}}",
+    subjectTemplate: "Application for {{role}} – {{my_name}}",
     model: "gpt-4o-mini",
+    templateMatching: true,
+    templateId: "",
   });
 
   // Clean simple white wires with NO arrows
@@ -574,8 +596,10 @@ export default function ApplyStudio() {
       description: String(node.data?.description || ""),
       threshold: typeof node.data?.threshold === "number" ? node.data.threshold : 75,
       tone: String(node.data?.tone || "formal"),
-      subjectTemplate: String(node.data?.subjectTemplate || "Application for {{jobTitle}} – {{candidateName}}"),
+      subjectTemplate: String(node.data?.subjectTemplate || "Application for {{role}} – {{my_name}}"),
       model: String(node.data?.model || "gpt-4o-mini"),
+      templateMatching: node.data?.templateMatching !== false,
+      templateId: String(node.data?.templateId || ""),
     });
     setDrawerMode("edit");
   }, []);
@@ -596,6 +620,8 @@ export default function ApplyStudio() {
               ...(editFormData.tone ? { tone: editFormData.tone } : {}),
               ...(editFormData.subjectTemplate ? { subjectTemplate: editFormData.subjectTemplate } : {}),
               ...(editFormData.model ? { model: editFormData.model } : {}),
+              templateMatching: editFormData.templateMatching !== false,
+              ...(editFormData.templateId ? { templateId: editFormData.templateId } : { templateId: "" }),
             },
           };
         }
@@ -977,9 +1003,12 @@ export default function ApplyStudio() {
 
       if (isCancelledRef.current) return;
 
-      // --- SKILL 5: Cold Application Email Drafter ---
-      updateSkill("skill-email", { status: "running", message: "Drafting personalized application email with AI..." });
-      log("info", "Email Drafter", `Generating cold application email with ${emailTone} tone...`);
+      // --- SKILL 5: Email Template Matcher & AI Drafter ---
+      updateSkill("skill-email", {
+        status: "running",
+        message: `Checking saved email templates for role "${extracted.job_title || "Role"}"...`
+      });
+      log("info", "Email Drafter", `Checking saved Email Templates for matching role: "${extracted.job_title || "Role"}"...`);
 
       let emailDraft: any = null;
       try {
@@ -991,18 +1020,29 @@ export default function ApplyStudio() {
         setEmailTo(emailDraft.to_email || extracted.hr_email || "");
         setEmailSubject(emailDraft.subject || `Application for ${extracted.job_title || "Position"}`);
         setEmailBody(emailDraft.body_html || "");
-        updateSkill("skill-email", {
-          status: "completed",
-          message: `Email draft created: "${emailDraft.subject || "Job Application"}"`,
-          details: `Tone: ${emailTone} • Tailored to ${extracted.company_name || "Company"}`
-        });
-        log("success", "Email Drafter", `Email draft generated: '${emailDraft.subject}'`);
+
+        if (emailDraft.template_matched) {
+          updateSkill("skill-email", {
+            status: "completed",
+            message: `Matched template: "${emailDraft.template_name}"`,
+            details: `Dynamic variables ({{role}}, {{company}}, {{my_name}}) populated for role "${extracted.job_title || "Role"}"`
+          });
+          log("success", "Email Drafter", `🎯 Matched saved role template: '${emailDraft.template_name}'! Dynamic variables replaced.`);
+        } else {
+          updateSkill("skill-email", {
+            status: "completed",
+            message: `AI customized email created: "${emailDraft.subject || "Job Application"}"`,
+            details: `No saved template found for role. AI drafted personalized email for ${extracted.company_name || "Company"}`
+          });
+          log("info", "Email Drafter", `No saved template found for role '${extracted.job_title}'. AI crafted personalized application.`);
+          log("success", "Email Drafter", `AI email generated: '${emailDraft.subject}'`);
+        }
       } catch (err: any) {
         gateHasIssue = true; // If drafting fails, do NOT auto-send!
         updateSkill("skill-email", {
           status: "error",
           message: "Failed to generate email draft",
-          error: `Dikkat: ${err.response?.data?.detail || err.message || "AI email drafting error"}`
+          error: `Dikkat: ${err.response?.data?.detail || err.message || "Email drafting error"}`
         });
         log("error", "Email Drafter", `Dikkat in Email Drafter: ${err.response?.data?.detail || err.message}`);
       }
@@ -1855,12 +1895,15 @@ export default function ApplyStudio() {
                     </label>
                     <div className="flex flex-wrap gap-1.5">
                       {[
-                        "{{companyName}}",
-                        "{{jobTitle}}",
-                        "{{hrEmail}}",
-                        "{{candidateName}}",
-                        "{{matchingSkills}}",
+                        "{{role}}",
+                        "{{company}}",
+                        "{{hr_name}}",
+                        "{{my_name}}",
+                        "{{skills}}",
                         "{{matchScore}}",
+                        "{{jobTitle}}",
+                        "{{companyName}}",
+                        "{{candidateName}}",
                       ].map((v) => (
                         <button
                           key={v}
@@ -1905,9 +1948,44 @@ export default function ApplyStudio() {
                     </div>
                   )}
 
-                  {/* Email: Tone and Subject */}
-                  {selectedNode.data?.category === "email" && (
+                  {/* Email & Template Settings */}
+                  {(selectedNode.data?.category === "email" || selectedNode.type === "generateEmail") && (
                     <div className="space-y-4 rounded-xl border border-sky-200 dark:border-sky-900/50 bg-sky-50/30 dark:bg-sky-950/20 p-4">
+                      {/* Role Template Matcher */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[11px] uppercase font-bold tracking-wider text-sky-900 dark:text-sky-300 flex items-center gap-1.5">
+                            <Sparkles size={13} className="text-sky-600 dark:text-sky-400" />
+                            <span>Email Template Strategy</span>
+                          </label>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/60 text-sky-700 dark:text-sky-300">
+                            Role Match + AI Fallback
+                          </span>
+                        </div>
+                        <select
+                          className="input w-full text-xs py-2 px-3 font-medium"
+                          value={editFormData.templateId || ""}
+                          onChange={(e) => setEditFormData((prev) => ({ ...prev, templateId: e.target.value }))}
+                        >
+                          <option value="">✨ Auto-match role from Email Templates (AI Fallback)</option>
+                          {savedTemplates.length > 0 && (
+                            <optgroup label="Or Force a Specific Template:">
+                              {savedTemplates.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  📄 {t.name} {t.global ? "(Default Seed)" : "(Custom Template)"}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
+                        <p className="text-[11px] text-sky-800 dark:text-sky-300/80 mt-1.5 leading-relaxed">
+                          {!editFormData.templateId
+                            ? "Pehle aapke saved email templates me dekhega ki same role ka template hai ya nahi. Agar mil gaya toh us template ko variables ke sath use karega; agar nahi mila toh AI khud personalized email likhega."
+                            : "Selected template will be used directly with dynamic variables ({{role}}, {{company}}, {{my_name}}, etc.) replaced."}
+                        </p>
+                      </div>
+
+                      {/* Tone selector */}
                       <div>
                         <label className="text-[11px] uppercase font-bold tracking-wider text-sky-900 dark:text-sky-300 block mb-1.5">
                           Email Tone
@@ -1923,15 +2001,16 @@ export default function ApplyStudio() {
                         </select>
                       </div>
 
+                      {/* Subject line template */}
                       <div>
                         <label className="text-[11px] uppercase font-bold tracking-wider text-sky-900 dark:text-sky-300 block mb-1.5">
                           Subject Line Template
                         </label>
                         <input
-                          className="input w-full text-xs py-2 px-3"
-                          value={editFormData.subjectTemplate || "Application for {{jobTitle}} – {{candidateName}}"}
+                          className="input w-full text-xs py-2 px-3 font-mono"
+                          value={editFormData.subjectTemplate || "Application for {{role}} – {{my_name}}"}
                           onChange={(e) => setEditFormData((prev) => ({ ...prev, subjectTemplate: e.target.value }))}
-                          placeholder="Application for {{jobTitle}} – {{candidateName}}"
+                          placeholder="Application for {{role}} – {{my_name}}"
                         />
                       </div>
                     </div>

@@ -21,6 +21,7 @@ from app.models.workflow import AutomationWorkflow, ExecutionLogEntry, WorkflowE
 from app.services.ai.job_poster_analyzer import JobPosterAnalyzer
 from app.services.resume_matcher import ResumeMatcher, ResumeMatchScore
 from app.services.sending_service import SendingService
+from app.services.template_matcher import TemplateMatcher
 
 log = get_logger("workflow_engine")
 settings = get_settings()
@@ -228,31 +229,54 @@ class WorkflowEngine:
 
                     await log_step("All safety checks passed (HR Email present, score >= threshold, no duplicate)", level="success", node_id=current_node.id)
 
-                # --- Node Type 6: AI Email Generation ---
-                elif node_type in ["generateEmail", "GENERATE_EMAIL"]:
+                # --- Node Type 6: AI / Template Email Generation ---
+                elif node_type in ["generateEmail", "GENERATE_EMAIL", "emailTemplate", "EMAIL_TEMPLATE"]:
                     extracted_dict = execution.context_data.get("extracted_data", {})
                     best_resume_dict = execution.context_data.get("best_resume", {})
-                    profile = await Profile.find_one(Profile.tenant_id == tenant_id)
+                    preferred_template_id = node_data.get("template_id") or node_data.get("selectedTemplateId")
+                    tone = node_data.get("tone", "formal")
 
-                    company = extracted_dict.get("company_name", "your team")
                     title = extracted_dict.get("job_title", "the open position")
-                    hr_name = extracted_dict.get("hr_name") or "Hiring Team"
-                    candidate_name = profile.name if profile and profile.name else "Applicant"
-                    skills_snippet = ", ".join(best_resume_dict.get("matching_skills", [])[:4]) or "modern software development"
+                    company = extracted_dict.get("company_name", "your team")
+                    hr_name = extracted_dict.get("hr_name")
+                    hr_email = extracted_dict.get("hr_email")
+                    skills = best_resume_dict.get("matching_skills") or extracted_dict.get("required_skills") or []
+                    match_score = execution.context_data.get("match_score")
 
-                    subject = f"Application for {title} - {candidate_name}"
-                    email_html = f"""<p>Dear {hr_name},</p>
-<p>I am writing to express my strong interest in the <strong>{title}</strong> role at <strong>{company}</strong>.</p>
-<p>With expertise in {skills_snippet}, I am confident in delivering high impact for your team. Please find my updated resume attached for your review.</p>
-<p>I look forward to discussing how my experience aligns with your goals.</p>
-<p>Best regards,<br><strong>{candidate_name}</strong></p>"""
+                    composed = await TemplateMatcher.compose_email(
+                        tenant_id=tenant_id,
+                        job_title=title,
+                        company_name=company,
+                        hr_name=hr_name,
+                        hr_email=hr_email,
+                        matching_skills=skills,
+                        match_score=match_score,
+                        tone=tone,
+                        preferred_template_id=preferred_template_id
+                    )
 
                     execution.context_data["email_draft"] = {
-                        "to": extracted_dict.get("hr_email"),
-                        "subject": subject,
-                        "body": email_html
+                        "to": composed.get("to_email") or hr_email,
+                        "subject": composed.get("subject"),
+                        "body": composed.get("body_html"),
+                        "template_matched": composed.get("template_matched", False),
+                        "template_name": composed.get("template_name")
                     }
-                    await log_step(f"Generated application email draft for {extracted_dict.get('hr_email')}", level="success", node_id=current_node.id)
+
+                    if composed.get("template_matched"):
+                        await log_step(
+                            f"Matched saved role template '{composed.get('template_name')}' for role '{title}'. Dynamic variables replaced.",
+                            level="success",
+                            node_id=current_node.id,
+                            data={"template": composed.get("template_name"), "subject": composed.get("subject")}
+                        )
+                    else:
+                        await log_step(
+                            f"No saved template matched for role '{title}'. Generated personalized cold email via AI.",
+                            level="info",
+                            node_id=current_node.id,
+                            data={"tone": tone, "subject": composed.get("subject")}
+                        )
 
                 # --- Node Type 7: Send Gmail / Save Draft ---
                 elif node_type in ["sendGmail", "SEND_GMAIL", "SAVE_GMAIL_DRAFT"]:
