@@ -17,6 +17,8 @@ import {
   ChevronUp,
   X,
   ExternalLink,
+  Mail,
+  MessageSquare,
 } from "lucide-react";
 
 export default function Applications() {
@@ -283,6 +285,54 @@ export default function Applications() {
                         {a.jd}
                       </div>
                     )}
+
+                    {/* Linked Communications from Same Recruiter or Company */}
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <MessageSquare size={13} className="text-emerald-500" />
+                          Linked Communications ({a.hrEmail || a.company})
+                        </span>
+                        {a.recruiterReplies && a.recruiterReplies.length > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-semibold">
+                            {a.recruiterReplies.length} message{a.recruiterReplies.length > 1 ? "s" : ""}
+                          </span>
+                        )}
+                      </div>
+
+                      {a.recruiterReplies && a.recruiterReplies.length > 0 ? (
+                        <div className="space-y-2">
+                          {a.recruiterReplies.map((reply, rIdx) => (
+                            <div
+                              key={rIdx}
+                              className="rounded-xl border border-emerald-200/70 bg-emerald-50/30 p-2.5 dark:border-emerald-900/50 dark:bg-emerald-950/20"
+                            >
+                              <div className="flex items-center justify-between gap-2 text-xs">
+                                <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-1">
+                                  <Mail size={12} className="text-emerald-600 dark:text-emerald-400" />
+                                  {reply.sender_name || reply.from}
+                                </span>
+                                <span className="text-[11px] text-slate-400 font-mono">
+                                  {fmt(reply.received_at || reply.at || "")}
+                                </span>
+                              </div>
+                              <p className="font-medium text-xs text-slate-800 dark:text-slate-200 mt-0.5">
+                                {reply.subject}
+                              </p>
+                              {reply.body_snippet && (
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 mt-1 leading-relaxed">
+                                  {reply.body_snippet}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 p-2.5 text-center text-[11px] text-slate-400">
+                          No replies received yet. Actively monitoring incoming emails from {a.hrEmail || a.company}.
+                        </div>
+                      )}
+                    </div>
 
                     <div>
                       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">

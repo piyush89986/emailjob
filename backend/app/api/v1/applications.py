@@ -1,9 +1,11 @@
 """Job applications tracker API router."""
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends
-from app.api.deps import get_application_repo
+from app.api.deps import get_application_repo, get_current_user
 from app.core.errors import NotFoundError
+from app.models.hr_inbox import HRInbox
+from app.models.user import User
 from app.repositories.domain import ApplicationRepo
 from app.schemas.domain import (
     ApplicationCreateRequest,
@@ -16,32 +18,77 @@ router = APIRouter(prefix="/applications", tags=["Applications"])
 
 
 @router.get("", response_model=List[ApplicationResponse])
-async def list_applications(repo: ApplicationRepo = Depends(get_application_repo)):
-    """List all job applications."""
+async def list_applications(
+    repo: ApplicationRepo = Depends(get_application_repo),
+    user: User = Depends(get_current_user)
+):
+    """List all job applications with linked communications from same HR email or company."""
     apps = await repo.find_all(sort=[("created_at", -1)])
-    return [
-        ApplicationResponse(
-            id=a.id,
-            title=a.title,
-            company=a.company,
-            jd=a.jd or "",
-            jd_url=a.jd_url or "",
-            contact_id=a.contact_id or "",
-            resume=a.resume or "v1",
-            status=a.status,  # type: ignore
-            hr_email=a.hr_email,
-            location=a.location,
-            salary_range=a.salary_range,
-            match_score=a.match_score,
-            job_poster_url=a.job_poster_url,
-            email_subject=a.email_subject,
-            email_body=a.email_body,
-            gmail_thread_id=a.gmail_thread_id,
-            created_at=a.created_at.isoformat() if a.created_at else None,
-            timeline=[TimelineEntry(at=t.get("at", ""), label=t.get("label", "")) for t in a.timeline]
+    hr_emails = await HRInbox.find(HRInbox.tenant_id == user.tenant_id).to_list()
+
+    responses = []
+    for a in apps:
+        combined_replies = list(a.recruiter_replies or [])
+        existing_msg_ids = {r.get("gmail_message_id") for r in combined_replies if r.get("gmail_message_id")}
+
+        # Cross-reference with HRInbox for matches on same HR email or same company
+        app_hr = (a.hr_email or "").strip().lower()
+        app_comp = (a.company or "").strip().lower()
+
+        for h in hr_emails:
+            if h.gmail_message_id in existing_msg_ids:
+                continue
+            h_sender = (h.sender_email or "").strip().lower()
+            h_comp = (h.company or "").strip().lower()
+            h_subj = (h.subject or "").strip().lower()
+
+            matched = False
+            if app_hr and (app_hr == h_sender or (len(app_hr) > 5 and app_hr in h_sender)):
+                matched = True
+            elif app_comp and len(app_comp) >= 3:
+                if app_comp in h_comp or app_comp in h_sender or app_comp in h_subj:
+                    matched = True
+
+            if matched:
+                combined_replies.append({
+                    "from": h.sender_email,
+                    "sender_name": h.sender_name or h.sender_email,
+                    "subject": h.subject,
+                    "body_snippet": h.preview_body or "",
+                    "at": h.received_at.isoformat() if h.received_at else datetime.now(timezone.utc).isoformat(),
+                    "received_at": h.received_at.isoformat() if h.received_at else datetime.now(timezone.utc).isoformat(),
+                    "gmail_message_id": h.gmail_message_id,
+                    "gmail_thread_id": h.gmail_thread_id,
+                    "company": h.company or a.company,
+                    "category": h.category
+                })
+                existing_msg_ids.add(h.gmail_message_id)
+
+        responses.append(
+            ApplicationResponse(
+                id=a.id,
+                title=a.title,
+                company=a.company,
+                jd=a.jd or "",
+                jd_url=a.jd_url or "",
+                contact_id=a.contact_id or "",
+                resume=a.resume or "v1",
+                status=a.status,  # type: ignore
+                hr_email=a.hr_email,
+                location=a.location,
+                salary_range=a.salary_range,
+                match_score=a.match_score,
+                job_poster_url=a.job_poster_url,
+                email_subject=a.email_subject,
+                email_body=a.email_body,
+                gmail_thread_id=a.gmail_thread_id,
+                created_at=a.created_at.isoformat() if a.created_at else None,
+                timeline=[TimelineEntry(at=t.get("at", ""), label=t.get("label", "")) for t in a.timeline],
+                recruiter_replies=combined_replies
+            )
         )
-        for a in apps
-    ]
+
+    return responses
 
 
 @router.post("", response_model=ApplicationResponse)
@@ -70,7 +117,8 @@ async def create_application(
         contact_id=app.contact_id,
         resume=app.resume,
         status=app.status,  # type: ignore
-        timeline=[TimelineEntry(at=t["at"], label=t["label"]) for t in app.timeline]
+        timeline=[TimelineEntry(at=t["at"], label=t["label"]) for t in app.timeline],
+        recruiter_replies=app.recruiter_replies
     )
 
 
@@ -100,7 +148,8 @@ async def update_application_status(
         contact_id=app.contact_id,
         resume=app.resume,
         status=app.status,  # type: ignore
-        timeline=[TimelineEntry(at=t["at"], label=t["label"]) for t in app.timeline]
+        timeline=[TimelineEntry(at=t["at"], label=t["label"]) for t in app.timeline],
+        recruiter_replies=app.recruiter_replies
     )
 
 

@@ -55,6 +55,18 @@ export interface App {
   gmailThreadId?: string;
   createdAt?: string;
   timeline: { at: string; label: string }[];
+  recruiterReplies?: Array<{
+    from: string;
+    sender_name?: string;
+    subject: string;
+    body_snippet?: string;
+    received_at?: string;
+    at?: string;
+    gmail_message_id?: string;
+    gmail_thread_id?: string;
+    company?: string;
+    category?: string;
+  }>;
 }
 export interface Account { id: string; provider: "gmail" | "outlook" | "imap"; address: string; status: "connected" | "error" | "needs_reauth"; isDefault: boolean }
 export interface Exp { id: string; company: string; role: string; period: string; bullets: string[] }
@@ -66,6 +78,7 @@ export interface RoleResume {
   id: string;
   role: string;
   filename: string;
+  skills?: string[];
   contentType: string;
   sizeBytes: number;
   url: string;
@@ -78,6 +91,62 @@ export interface RoleResume {
   updatedAt: string;
 }
 export interface Draft { to: string; subject: string; body: string }
+
+export interface HubComment {
+  id: string;
+  user_id: string;
+  user_name: string;
+  text: string;
+  created_at: string;
+}
+
+export interface HubPost {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  post_type: "poster" | "direct_email";
+  title: string;
+  company: string;
+  hr_email: string;
+  location?: string;
+  skills: string[];
+  jd?: string;
+  image_url?: string;
+  likes: string[];
+  comments: HubComment[];
+  created_at: string;
+}
+
+export interface HubChatMessage {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  text: string;
+  created_at: string;
+}
+
+export interface FeedbackItem {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  category: string;
+  title: string;
+  description: string;
+  impact: string;
+  status: string;
+  votes: string[];
+  created_at: string;
+}
+
+export interface AccessRequestItem {
+  id: string;
+  email: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+}
 
 export interface ExtractedJobDetails {
   company_name?: string;
@@ -244,6 +313,10 @@ export interface S {
   hrInbox: HRInboxItem[];
   hrCounts: HRCounts;
   hrUnreadCount: number;
+  hubPosts: HubPost[];
+  hubChat: HubChatMessage[];
+  feedbacks: FeedbackItem[];
+  pendingAccessRequests: AccessRequestItem[];
 }
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
@@ -288,6 +361,10 @@ const emptyState = (): S => ({
   hrInbox: [],
   hrCounts: { all: 0, hr: 0, interviews: 0, applications: 0, rejections: 0, unread: 0, review: 0 },
   hrUnreadCount: 0,
+  hubPosts: [],
+  hubChat: [],
+  feedbacks: [],
+  pendingAccessRequests: [],
   profile: {
     name: "",
     email: "",
@@ -1059,17 +1136,55 @@ export async function matchResumesForPoster(id: string, extractedData?: Extracte
   }
 }
 
-export async function generateEmailForPoster(id: string, params: { extractedData?: ExtractedJobDetails; resumeId?: string; tone?: string }) {
+export async function generateEmailForPoster(id: string, params: { extractedData?: ExtractedJobDetails; resumeId?: string; tone?: string; templateId?: string; useTemplates?: boolean }) {
   const safeId = id || "current";
   try {
     const res = await api.post(`/apply/jobs/${safeId}/generate-email`, {
       extracted_data: params.extractedData,
       resume_id: params.resumeId,
-      tone: params.tone || "formal"
+      template_id: params.templateId,
+      tone: params.tone || "formal",
+      use_templates: params.useTemplates !== false
     });
     return res.data;
   } catch (err: any) {
     toast(err.response?.data?.detail || "Failed generating email", "err");
+    throw err;
+  }
+}
+
+export async function directJobEntry(params: {
+  hr_email: string;
+  job_title: string;
+  company_name?: string;
+  role_resume_id?: string;
+  tone?: string;
+  template_id?: string;
+  use_templates?: boolean;
+}) {
+  try {
+    const res = await api.post("/apply/direct-entry", params);
+    fetchJobPosters();
+    return res.data;
+  } catch (err: any) {
+    const msg = err.response?.data?.detail || "Failed to process direct entry";
+    toast(msg, "err");
+    throw err;
+  }
+}
+
+export async function resetWorkflowToDefault(workflowId?: string): Promise<AutomationWorkflow> {
+  try {
+    const endpoint = workflowId ? `/workflows/${workflowId}/reset-default` : "/workflows/reset-default";
+    const res = await api.post(endpoint);
+    const updated: AutomationWorkflow = res.data;
+    set((s) => ({
+      workflows: s.workflows.map((w) => (w.id === updated.id ? updated : w))
+    }));
+    toast("Pipeline reset to clean default 6-node layout!");
+    return updated;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed to reset workflow", "err");
     throw err;
   }
 }
@@ -1189,6 +1304,222 @@ export async function executeWorkflow(workflowId: string, posterId?: string, isT
   } catch (err: any) {
     const msg = err.response?.data?.detail || "Workflow execution failed";
     toast(msg, "err");
+    throw err;
+  }
+}
+
+// --- Community Hub & Group Chat API ---
+export async function fetchHubPosts(): Promise<HubPost[]> {
+  try {
+    const res = await api.get("/hub/posts");
+    const hubPosts: HubPost[] = res.data || [];
+    set(() => ({ hubPosts }));
+    return hubPosts;
+  } catch (err) {
+    console.warn("Failed fetching hub posts", err);
+    return [];
+  }
+}
+
+export async function createHubPost(payload: {
+  title: string;
+  company: string;
+  hr_email: string;
+  location?: string;
+  skills?: string[];
+  jd?: string;
+  image_url?: string;
+  post_type?: string;
+}): Promise<HubPost> {
+  try {
+    const res = await api.post("/hub/posts", payload);
+    const post: HubPost = res.data;
+    set((s) => ({ hubPosts: [post, ...s.hubPosts] }));
+    toast("Job opening shared to Community Hub!");
+    return post;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed sharing post", "err");
+    throw err;
+  }
+}
+
+export async function toggleLikePost(postId: string) {
+  try {
+    const res = await api.post(`/hub/posts/${postId}/like`);
+    const currentUserId = (state.user as any)?.id || state.user?.email || "";
+    set((s) => ({
+      hubPosts: s.hubPosts.map((p) => {
+        if (p.id === postId) {
+          const hasLiked = p.likes.includes(currentUserId);
+          const newLikes = hasLiked
+            ? p.likes.filter((u) => u !== currentUserId)
+            : [...p.likes, currentUserId];
+          return { ...p, likes: newLikes };
+        }
+        return p;
+      }),
+    }));
+    return res.data;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed to like post", "err");
+  }
+}
+
+export async function addPostComment(postId: string, text: string) {
+  try {
+    const res = await api.post(`/hub/posts/${postId}/comments`, { text });
+    const comment: HubComment = res.data;
+    set((s) => ({
+      hubPosts: s.hubPosts.map((p) => {
+        if (p.id === postId) {
+          return { ...p, comments: [...p.comments, comment] };
+        }
+        return p;
+      }),
+    }));
+    toast("Comment posted!");
+    return comment;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed adding comment", "err");
+    throw err;
+  }
+}
+
+export async function fetchHubChat(): Promise<HubChatMessage[]> {
+  try {
+    const res = await api.get("/hub/chat");
+    const hubChat: HubChatMessage[] = res.data || [];
+    set(() => ({ hubChat }));
+    return hubChat;
+  } catch (err) {
+    console.warn("Failed fetching chat", err);
+    return [];
+  }
+}
+
+export async function sendHubChatMessage(text: string): Promise<HubChatMessage> {
+  try {
+    const res = await api.post("/hub/chat", { text });
+    const msg: HubChatMessage = res.data;
+    set((s) => ({ hubChat: [...s.hubChat, msg] }));
+    return msg;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed sending message", "err");
+    throw err;
+  }
+}
+
+export async function prepareApplyFromHub(postId: string) {
+  try {
+    const res = await api.post(`/hub/posts/${postId}/apply-prep`);
+    return res.data;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed preparing application", "err");
+    throw err;
+  }
+}
+
+// --- Feedback & Improvement Suggestions API ---
+export async function fetchFeedbacks(): Promise<FeedbackItem[]> {
+  try {
+    const res = await api.get("/feedback");
+    const feedbacks: FeedbackItem[] = res.data || [];
+    set(() => ({ feedbacks }));
+    return feedbacks;
+  } catch (err) {
+    console.warn("Failed fetching feedbacks", err);
+    return [];
+  }
+}
+
+export async function submitFeedback(payload: {
+  category: string;
+  title: string;
+  description: string;
+  impact: string;
+}): Promise<FeedbackItem> {
+  try {
+    const res = await api.post("/feedback", payload);
+    const item: FeedbackItem = res.data;
+    set((s) => ({ feedbacks: [item, ...s.feedbacks] }));
+    toast("Thank you! Feedback submitted successfully.");
+    return item;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed submitting feedback", "err");
+    throw err;
+  }
+}
+
+export async function voteFeedback(feedbackId: string) {
+  try {
+    const res = await api.post(`/feedback/${feedbackId}/vote`);
+    const currentUserId = (state.user as any)?.id || state.user?.email || "";
+    set((s) => ({
+      feedbacks: s.feedbacks.map((f) => {
+        if (f.id === feedbackId) {
+          const hasVoted = f.votes.includes(currentUserId);
+          const newVotes = hasVoted
+            ? f.votes.filter((u) => u !== currentUserId)
+            : [...f.votes, currentUserId];
+          return { ...f, votes: newVotes };
+        }
+        return f;
+      }),
+    }));
+    return res.data;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed voting", "err");
+  }
+}
+
+// --- Platform Access Requests API ---
+export async function requestPlatformAccess(email: string) {
+  try {
+    const res = await api.post("/access/request", { email });
+    toast(res.data.message || "Access request submitted!");
+    return res.data;
+  } catch (err: any) {
+    const msg = err.response?.data?.detail || "Failed to submit access request";
+    toast(msg, "err");
+    throw err;
+  }
+}
+
+export async function fetchPendingAccessRequests(): Promise<AccessRequestItem[]> {
+  try {
+    const res = await api.get("/access/pending");
+    const pendingAccessRequests: AccessRequestItem[] = res.data || [];
+    set(() => ({ pendingAccessRequests }));
+    return pendingAccessRequests;
+  } catch (err) {
+    return [];
+  }
+}
+
+export async function approveAccessRequest(requestId: string) {
+  try {
+    const res = await api.post(`/access/${requestId}/approve`);
+    set((s) => ({
+      pendingAccessRequests: s.pendingAccessRequests.filter((r) => r.id !== requestId),
+    }));
+    toast(`Access granted to ${res.data.email}!`);
+    return res.data;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed approving access", "err");
+    throw err;
+  }
+}
+
+export async function rejectAccessRequest(requestId: string) {
+  try {
+    const res = await api.post(`/access/${requestId}/reject`);
+    set((s) => ({
+      pendingAccessRequests: s.pendingAccessRequests.filter((r) => r.id !== requestId),
+    }));
+    toast(`Access request rejected for ${res.data.email}`);
+    return res.data;
+  } catch (err: any) {
+    toast(err.response?.data?.detail || "Failed rejecting access", "err");
     throw err;
   }
 }

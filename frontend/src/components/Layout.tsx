@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -17,13 +17,25 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  Globe,
+  Check,
+  X,
+  Bell,
 } from "lucide-react";
-import { logout, toggleDark, useS } from "@/lib/store";
+import {
+  logout,
+  toggleDark,
+  useS,
+  fetchPendingAccessRequests,
+  approveAccessRequest,
+  rejectAccessRequest,
+} from "@/lib/store";
 import { Toaster } from "./ui";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/apply-studio", label: "Apply Studio", icon: Sparkles },
+  { to: "/hub", label: "Hub", icon: Globe },
   { to: "/hr-inbox", label: "HR Inbox", icon: MailCheck },
   { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/compose", label: "Compose", icon: PenSquare },
@@ -40,6 +52,16 @@ export default function Layout() {
   const dark = useS((s) => s.dark);
   const user = useS((s) => s.user);
   const reauth = useS((s) => s.accounts.some((a) => a.status !== "connected"));
+  const pendingAccessRequests = useS((s) => s.pendingAccessRequests);
+
+  // Poll for pending access requests
+  useEffect(() => {
+    fetchPendingAccessRequests();
+    const interval = setInterval(() => {
+      fetchPendingAccessRequests();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Sidebar collapse state with localStorage persistence
   const [collapsed, setCollapsed] = useState(() => {
@@ -201,6 +223,40 @@ export default function Layout() {
 
       {/* Main Content Area (No top header!) */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        {/* Sticky Notification for Admin: Platform Access Requests */}
+        {pendingAccessRequests.length > 0 && (
+          <div className="shrink-0 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 px-4 py-2.5 text-white shadow-md z-40 border-b border-amber-500">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 max-w-7xl">
+              <div className="flex items-center gap-2 text-xs font-medium">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-white shrink-0 text-sm">
+                  🔔
+                </span>
+                <span>
+                  <strong className="font-bold">Pending Platform Access Request ({pendingAccessRequests.length}):</strong>{" "}
+                  User <span className="underline font-mono font-semibold bg-black/25 px-1.5 py-0.5 rounded">{pendingAccessRequests[0].email}</span>{" "}
+                  has requested platform access in this beta testing environment.
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => approveAccessRequest(pendingAccessRequests[0].id)}
+                  className="inline-flex items-center gap-1 rounded-full bg-emerald-600 hover:bg-emerald-700 px-3 py-1 text-xs font-bold text-white shadow-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  <Check size={13} />
+                  <span>Grant Access</span>
+                </button>
+                <button
+                  onClick={() => rejectAccessRequest(pendingAccessRequests[0].id)}
+                  className="inline-flex items-center gap-1 rounded-full bg-rose-700 hover:bg-rose-800 px-3 py-1 text-xs font-bold text-white shadow-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  <X size={13} />
+                  <span>Reject</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {reauth && (
           <Link
             to="/settings"

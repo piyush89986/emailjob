@@ -169,26 +169,54 @@ class SyncService:
             # Real recruiter reply!
             await contact_repo.update(contact.id, status="Replied", last_replied_at=datetime.now(timezone.utc))
             app_repo = ApplicationRepo(tenant_id)
-            app = await app_repo.find_by_contact_id(contact.id)
+            clean_sender_lower = clean_sender.lower().strip()
+            sender_domain = clean_sender_lower.split("@")[-1] if "@" in clean_sender_lower else ""
+
+            from app.models.application import Application
+            app = await app_repo.find_by_contact_id(contact.id) if contact else None
             if not app:
-                # Also try matching by thread ID or hr_email
-                from app.models.application import Application
+                # 1. Match by thread ID or hr_email
+                import re
                 app = await Application.find_one(
                     Application.tenant_id == tenant_id,
                     {"$or": [
                         {"gmail_thread_id": matched_thread.id},
-                        {"hr_email": clean_sender.lower()}
+                        {"hr_email": {"$regex": f"^{re.escape(clean_sender_lower)}$", "$options": "i"}}
                     ]}
                 )
+
+            # 2. Match by Company Name (Case-insensitive match on sender, domain, or subject)
+            if not app:
+                active_apps = await Application.find(Application.tenant_id == tenant_id).to_list()
+                for potential_app in active_apps:
+                    comp = (potential_app.company or "").strip().lower()
+                    if comp and len(comp) >= 3:
+                        if (
+                            comp in clean_sender_lower
+                            or (sender_domain and comp in sender_domain)
+                            or (subject and comp in subject.lower())
+                        ):
+                            app = potential_app
+                            break
+
             if app:
-                await app_repo.append_timeline(app.id, f"Recruiter reply received from {clean_sender}")
+                company_tag = f" ({app.company})" if app.company else ""
+                await app_repo.append_timeline(app.id, f"Recruiter reply received from {clean_sender}{company_tag}")
                 reply_record = {
                     "from": clean_sender,
+                    "sender_name": getattr(item, "from_name", "") or clean_sender,
                     "subject": subject,
-                    "body_snippet": body[:300] if body else "",
-                    "at": datetime.now(timezone.utc).isoformat()
+                    "body_snippet": body[:500] if body else "",
+                    "at": datetime.now(timezone.utc).isoformat(),
+                    "received_at": datetime.now(timezone.utc).isoformat(),
+                    "gmail_message_id": getattr(item, "id", None) or getattr(msg, "id", None),
+                    "gmail_thread_id": matched_thread.id,
+                    "company": app.company
                 }
-                app.recruiter_replies.append(reply_record)
+                # Prevent duplicate messages in recruiter_replies
+                msg_id = reply_record["gmail_message_id"]
+                if not msg_id or not any(r.get("gmail_message_id") == msg_id for r in app.recruiter_replies):
+                    app.recruiter_replies.append(reply_record)
                 app.status = "Response Received"
                 app.updated_at = datetime.now(timezone.utc)
                 await app.save()

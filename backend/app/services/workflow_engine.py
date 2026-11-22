@@ -226,6 +226,9 @@ class WorkflowEngine:
                         best_resume_dict = execution.context_data.get("best_resume", {})
                         preferred_template_id = node_data.get("template_id") or node_data.get("selectedTemplateId")
                         tone = node_data.get("tone", "formal")
+                        use_templates = node_data.get("use_templates", True)
+                        if use_templates is None:
+                            use_templates = True
 
                         title = extracted_dict.get("job_title", "the open position")
                         company = extracted_dict.get("company_name", "your team")
@@ -243,7 +246,8 @@ class WorkflowEngine:
                             matching_skills=skills,
                             match_score=match_score,
                             tone=tone,
-                            preferred_template_id=preferred_template_id
+                            preferred_template_id=preferred_template_id,
+                            use_templates=use_templates
                         )
 
                         if not composed or not composed.get("body_html"):
@@ -263,6 +267,13 @@ class WorkflowEngine:
                                 level="success",
                                 node_id=current_node.id,
                                 data={"template": composed.get("template_name"), "subject": composed.get("subject")}
+                            )
+                        elif not use_templates:
+                            await log_step(
+                                f"Template matching turned OFF by user. Generated tailored application email via AI for role '{title}'.",
+                                level="info",
+                                node_id=current_node.id,
+                                data={"tone": tone, "subject": composed.get("subject")}
                             )
                         else:
                             await log_step(

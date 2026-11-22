@@ -56,7 +56,9 @@ import {
   ArrowRight,
   XCircle,
   RefreshCw,
-  Square
+  Square,
+  Save,
+  MessageSquare
 } from "lucide-react";
 
 import {
@@ -71,6 +73,8 @@ import {
   matchResumesForPoster,
   generateEmailForPoster,
   sendPosterApplication,
+  directJobEntry,
+  resetWorkflowToDefault,
   triggerFollowUp,
   fetchWorkflows,
   saveWorkflow,
@@ -397,57 +401,49 @@ export interface PipelineLog {
 const INITIAL_PIPELINE_SKILLS: SkillStatus[] = [
   {
     id: "skill-vision",
-    name: "AI Vision OCR Extraction",
-    skillType: "Vision AI (GPT-4o-mini)",
+    name: "Extracting Job Description",
+    skillType: "Vision AI + OCR",
     status: "idle",
-    message: "Extracts role, company, recruiter email, and required skills",
-  },
-  {
-    id: "skill-jd",
-    name: "Job Description Generator",
-    skillType: "Document AI",
-    status: "idle",
-    message: "Synthesizes structured Markdown JD with responsibilities",
+    message: "Extracts role, company, recruiter email, and required skills & generates JD",
   },
   {
     id: "skill-resume",
-    name: "AI Resume Matcher & Scorer",
-    skillType: "Scoring Engine",
+    name: "Match Best Resume by Role",
+    skillType: "Role & ATS Matcher",
     status: "idle",
-    message: "Calculates 5-factor weighted fit score against saved resumes",
-  },
-  {
-    id: "skill-gate",
-    name: "Safety Gate & Email Check",
-    skillType: "Filter / Gatekeeper",
-    status: "idle",
-    message: "Verifies recruiter HR email presence for valid application dispatch",
+    message: "Selects best stored resume matching role with 5-factor fit score",
   },
   {
     id: "skill-email",
-    name: "Email Template / AI Drafter",
+    name: "Email Drafter (Templates + AI)",
     skillType: "Template Matcher + AI",
     status: "idle",
     message: "Matches saved role template or drafts personalized cold email via AI",
   },
   {
     id: "skill-gmail",
-    name: "Gmail API Dispatcher",
-    skillType: "Gmail Integration",
+    name: "Send via Gmail",
+    skillType: "Gmail API Dispatcher",
     status: "idle",
-    message: "Sends email with resume MIME attachment directly via Gmail",
+    message: "Dispatches email with tailored resume PDF attachment via Gmail API",
   },
   {
     id: "skill-tracker",
-    name: "Application Lifecycle Tracker",
-    skillType: "SaaS Database",
+    name: "Track Application & Company Replies",
+    skillType: "Lifecycle Tracker",
     status: "idle",
-    message: "Logs application and activates real-time reply webhook monitoring",
+    message: "Logs application and tracks incoming replies from the same HR email or company",
   },
 ];
 
 export default function ApplyStudio() {
   const [activeTab, setActiveTab] = useState<"hub" | "builder" | "history">("hub");
+
+  // Input Mode state: Full Job Poster vs Email Screenshot vs Direct HR Email
+  const [inputMode, setInputMode] = useState<"poster" | "email_image" | "direct_email">("poster");
+  const [directHrEmail, setDirectHrEmail] = useState("");
+  const [directCompany, setDirectCompany] = useState("");
+  const [directSelectedRoleId, setDirectSelectedRoleId] = useState("");
 
   // Metrics & State from Store
   const metrics = useS((s) => s.applyMetrics);
@@ -748,6 +744,79 @@ export default function ApplyStudio() {
     toast("Pipeline organized into clean 2-row layout!");
   };
 
+  // Reset Workflow to Default 6-Node Pipeline
+  const handleResetDefaultWorkflow = async () => {
+    try {
+      const updated = await resetWorkflowToDefault(selectedWorkflow?.id);
+      setSelectedWorkflow(updated);
+      setNodes(updated.nodes);
+      setEdges(
+        updated.edges.map((e: any) => ({
+          ...e,
+          type: "smoothstep",
+          animated: true,
+          style: { stroke: "#6366f1", strokeWidth: 2.5 },
+          markerEnd: undefined,
+        }))
+      );
+      toast("Pipeline reset to clean 6-node layout!");
+    } catch (err: any) {
+      toast("Failed to reset pipeline", "err");
+    }
+  };
+
+  // Direct HR Email Application Handler (Option 3)
+  const handleDirectApply = async () => {
+    const cleanEmail = directHrEmail.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      return toast("Please enter a valid HR email address", "err");
+    }
+    const chosenResume = roleResumes.find((r) => r.id === directSelectedRoleId) || (roleResumes.find((r) => r.isDefault)) || roleResumes[0];
+    if (!chosenResume) {
+      return toast("Please select a target role from your saved resumes", "err");
+    }
+
+    setIsUploading(true);
+    try {
+      const res = await directJobEntry({
+        hr_email: cleanEmail,
+        job_title: chosenResume.role,
+        company_name: directCompany.trim() || undefined,
+        role_resume_id: chosenResume.id,
+        tone: emailTone
+      });
+
+      const poster = res.poster;
+      setActivePoster(poster);
+      setEditDetails(poster.extracted_data);
+      setEditableJd(poster.generated_jd || "");
+      setSelectedResumeId(chosenResume.id);
+      setEmailTo(res.email_draft?.to_email || cleanEmail);
+      setEmailSubject(res.email_draft?.subject || `Application for ${chosenResume.role}`);
+      setEmailBody(res.email_draft?.body_html || "");
+
+      if (workflowMode === "auto") {
+        await sendPosterApplication(poster.id, {
+          toEmail: cleanEmail,
+          subject: res.email_draft?.subject || `Application for ${chosenResume.role}`,
+          bodyHtml: res.email_draft?.body_html || "",
+          resumeId: chosenResume.id,
+          extractedData: poster.extracted_data,
+          generatedJd: poster.generated_jd
+        });
+        toast("Application auto-dispatched via Gmail!");
+        setActiveTab("history");
+      } else {
+        setReviewStep(1);
+        toast("Application generated! Review details and send.");
+      }
+    } catch (err: any) {
+      toast(err.message || "Failed to process direct application", "err");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   // Handle Drag & Drop
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -912,7 +981,7 @@ export default function ApplyStudio() {
           "skill-vision",
           "Vision OCR",
           `Image upload fail ho gaya (${errDetail})`,
-          ["skill-jd", "skill-resume", "skill-gate", "skill-email", "skill-gmail", "skill-tracker"]
+          ["skill-resume", "skill-email", "skill-gmail", "skill-tracker"]
         );
         if (!ok) return;
         return;
@@ -923,7 +992,7 @@ export default function ApplyStudio() {
           "skill-vision",
           "Vision OCR",
           poster.error_message || "Vision extraction failed on backend",
-          ["skill-jd", "skill-resume", "skill-gate", "skill-email", "skill-gmail", "skill-tracker"]
+          ["skill-resume", "skill-email", "skill-gmail", "skill-tracker"]
         );
         if (!ok) return;
       }
@@ -935,61 +1004,32 @@ export default function ApplyStudio() {
         confidence_score: 0.8,
         requires_manual_verification: false
       };
-      setEditDetails(extracted);
-      setEmailTo(extracted.hr_email || "");
-      setEditableJd(poster.generated_jd || "");
 
-      if (!extracted.job_title && !extracted.company_name) {
-        updateSkill("skill-vision", {
-          status: "warning",
-          message: "Job details partially detected. Verify company & role.",
-          details: `Confidence: ${Math.round((extracted.confidence_score || 0.5) * 100)}%`,
-          error: "Dikkat: Vision model poster se clear company ya title nahi padh paya."
-        });
-        log("warning", "Vision OCR", "Dikkat: Company name ya job title clearly identify nahi hua.");
-      } else {
-        updateSkill("skill-vision", {
-          status: "completed",
-          message: `Extracted: ${extracted.job_title || "Role"} at ${extracted.company_name || "Company"}`,
-          details: `Found ${extracted.required_skills?.length || 0} skills • HR: ${extracted.hr_email || "Not found"}`
-        });
-        log("success", "Vision OCR", `Extracted '${extracted.job_title}' at '${extracted.company_name}' (${extracted.required_skills?.length || 0} skills)`);
-        if (extracted.hr_email) {
-          log("success", "Vision OCR", `Found recruiter email: ${extracted.hr_email}`);
-        } else {
-          log("warning", "Vision OCR", "Recruiter HR email was not detected on poster image.");
+      // If recruiter email detected but job title missing (e.g. email screenshot), auto-align to user's saved role
+      if (extracted.hr_email && (!extracted.job_title || extracted.job_title.toLowerCase().includes("unknown") || extracted.job_title.trim() === "")) {
+        if (roleResumes.length > 0) {
+          const chosen = roleResumes.find((r) => r.isDefault) || roleResumes[0];
+          extracted.job_title = chosen.role;
+          extracted.required_skills = chosen.skills || [];
+          log("info", "Role Matching", `Recruiter email '${extracted.hr_email}' detected without JD. Selected saved role '${chosen.role}'.`);
         }
       }
 
-      if (isCancelledRef.current) return;
+      setEditDetails(extracted);
+      setEmailTo(extracted.hr_email || "");
+      const jdText = poster.generated_jd || (extracted.job_responsibilities?.length ? extracted.job_responsibilities.join("\n") : "Standard job description generated.");
+      setEditableJd(jdText);
 
-      // --- SKILL 2: Job Description Generator ---
-      updateSkill("skill-jd", { status: "running", message: "Formatting job responsibilities, skills, and qualifications into Markdown JD..." });
-      log("info", "JD Generator", "Formatting job responsibilities, skills, and qualifications into Markdown JD...");
-
-      let jdText = "";
-      try {
-        jdText = poster.generated_jd || (extracted.job_responsibilities?.length ? extracted.job_responsibilities.join("\n") : "Standard job description generated.");
-        setEditableJd(jdText);
-        updateSkill("skill-jd", {
-          status: "completed",
-          message: "Structured Job Description generated successfully",
-          details: `${jdText.length} characters structured`
-        });
-        log("success", "JD Generator", "Markdown Job Description ready for resume matching.");
-      } catch (jdErr: any) {
-        const ok = handleStepFailure(
-          "skill-jd",
-          "JD Generator",
-          jdErr.message || "Failed to generate structured JD",
-          ["skill-resume", "skill-gate", "skill-email", "skill-gmail", "skill-tracker"]
-        );
-        if (!ok) return;
-      }
+      updateSkill("skill-vision", {
+        status: "completed",
+        message: `Extracted: ${extracted.job_title || "Target Role"} at ${extracted.company_name || "Hiring Team"}`,
+        details: `Skills: ${extracted.required_skills?.length || 0} • HR Email: ${extracted.hr_email || "Detected"}`
+      });
+      log("success", "Vision OCR", `Extracted '${extracted.job_title}' at '${extracted.company_name}' (HR: ${extracted.hr_email || "Pending"})`);
 
       if (isCancelledRef.current) return;
 
-      // --- SKILL 3: AI Resume Matcher & Scorer ---
+      // --- SKILL 2: AI Resume Matcher & Scorer ---
       updateSkill("skill-resume", { status: "running", message: "Matching candidate resumes with extracted job criteria..." });
       log("info", "Resume Matcher", "Evaluating fit against stored role resumes in Resume Builder...");
 
@@ -1010,45 +1050,28 @@ export default function ApplyStudio() {
           details: `Matched skills: ${(bestMatch.matching_skills || []).slice(0, 4).join(", ") || "General alignment"}`
         });
         log("success", "Resume Matcher", `Selected '${bestMatch.role_name}' with fit score ${bestMatch.match_percentage}%`);
+      } else if (roleResumes.length > 0) {
+        const fallbackResume = roleResumes.find((r) => r.isDefault) || roleResumes[0];
+        setSelectedResumeId(fallbackResume.id);
+        updateSkill("skill-resume", {
+          status: "completed",
+          message: `Selected Saved Resume: ${fallbackResume.role}`,
+          details: `Using default candidate resume: ${fallbackResume.filename}`
+        });
+        log("success", "Resume Matcher", `Selected stored role resume '${fallbackResume.role}'`);
       } else {
         const ok = handleStepFailure(
           "skill-resume",
           "Resume Matcher",
           "No saved role resumes found in Resume Builder. Please upload a resume first.",
-          ["skill-gate", "skill-email", "skill-gmail", "skill-tracker"]
-        );
-        if (!ok) return;
-      }
-
-      if (isCancelledRef.current) return;
-
-      // --- SKILL 4: Safety Gate & Recruiter Email Check ---
-      updateSkill("skill-gate", { status: "running", message: "Validating recipient HR email presence..." });
-      log("info", "Safety Gate", "Validating recipient HR email...");
-
-      const hasHrEmail = Boolean(extracted.hr_email && extracted.hr_email.includes("@"));
-      const matchScore = bestMatch ? bestMatch.match_percentage : (extracted.required_skills?.length > 0 ? 70 : 50);
-
-      if (!hasHrEmail) {
-        const ok = handleStepFailure(
-          "skill-gate",
-          "Safety Gate",
-          "Recruiter HR email missing from poster",
           ["skill-email", "skill-gmail", "skill-tracker"]
         );
         if (!ok) return;
-      } else {
-        updateSkill("skill-gate", {
-          status: "completed",
-          message: `Safety check passed (Recipient: ${extracted.hr_email} • Best Resume: ${bestMatch?.role_name || "Profile"})`,
-          details: `Verified recipient address: ${extracted.hr_email}`
-        });
-        log("success", "Safety Gate", `Passed: Recruiter email verified (${extracted.hr_email})`);
       }
 
       if (isCancelledRef.current) return;
 
-      // --- SKILL 5: Email Template Matcher & AI Drafter ---
+      // --- SKILL 3: Email Template Matcher & AI Drafter ---
       updateSkill("skill-email", {
         status: "running",
         message: `Checking saved email templates for role "${extracted.job_title || "Role"}"...`
@@ -1059,7 +1082,7 @@ export default function ApplyStudio() {
       try {
         emailDraft = await generateEmailForPoster(poster.id, {
           extractedData: extracted,
-          resumeId: bestMatch?.resume_id,
+          resumeId: bestMatch?.resume_id || selectedResumeId,
           tone: emailTone
         });
         setEmailTo(emailDraft.to_email || extracted.hr_email || "");
@@ -1095,7 +1118,7 @@ export default function ApplyStudio() {
 
       if (isCancelledRef.current) return;
 
-      // --- SKILL 6 & 7: Gmail Dispatcher & Application Tracker ---
+      // --- SKILL 4 & 5: Gmail Dispatcher & Application Tracker ---
       if (workflowMode === "auto") {
         const recipient = emailDraft?.to_email || extracted.hr_email;
         if (!recipient || !emailDraft?.body_html) {
@@ -1468,83 +1491,226 @@ export default function ApplyStudio() {
               </div>
             </div>
 
-            {/* Dropzone Container */}
-            <div
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition-all cursor-pointer ${
-                dragActive
-                  ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/20"
-                  : "border-slate-300 hover:border-indigo-500 dark:border-slate-700 dark:hover:border-indigo-400 bg-slate-50/50 dark:bg-slate-950/50"
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,application/pdf"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && handleFileSelected(e.target.files[0])}
-              />
+            {/* Input Mode Selector: Complete Poster vs Email Screenshot vs Direct HR Email */}
+            <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <span className="text-xs font-semibold text-slate-500 mr-1">Input Method:</span>
+              <button
+                type="button"
+                onClick={() => setInputMode("poster")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  inputMode === "poster"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+                }`}
+              >
+                <FileText size={13} />
+                <span>1. Complete Job Poster</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setInputMode("email_image")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  inputMode === "email_image"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+                }`}
+              >
+                <Layers size={13} />
+                <span>2. Email / Contact Screenshot</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setInputMode("direct_email")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  inputMode === "direct_email"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+                }`}
+              >
+                <Mail size={13} />
+                <span>3. Direct HR Email Input</span>
+              </button>
+            </div>
 
-              {filePreview ? (
-                <div className="flex flex-col items-center gap-3">
-                  <img
-                    src={filePreview}
-                    alt="Poster Preview"
-                    className="max-h-48 rounded-lg object-contain shadow-md border border-slate-200 dark:border-slate-700"
-                  />
-                  <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
-                    <span>{selectedFile?.name}</span>
+            {inputMode === "direct_email" ? (
+              /* Option 3: Direct Recruiter Email + Role Picker */
+              <div className="rounded-xl border border-indigo-200/80 bg-indigo-50/20 p-5 dark:border-indigo-900/50 dark:bg-indigo-950/10 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="label">Recruiter / HR Email *</label>
+                    <input
+                      className="input text-xs"
+                      placeholder="e.g. recruiter@company.com or tanwarpiyushsingh31@gmail.com"
+                      value={directHrEmail}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDirectHrEmail(val);
+                        if (!directCompany && val.includes("@")) {
+                          const domain = val.split("@")[1]?.split(".")[0];
+                          if (domain && !["gmail", "yahoo", "outlook", "hotmail", "proton", "icloud"].includes(domain.toLowerCase())) {
+                            setDirectCompany(domain.charAt(0).toUpperCase() + domain.slice(1));
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Company Name (Optional)</label>
+                    <input
+                      className="input text-xs"
+                      placeholder="e.g. Google, Stripe, Nexes"
+                      value={directCompany}
+                      onChange={(e) => setDirectCompany(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="label mb-0">Select Target Role * (From your saved resumes)</label>
+                    <span className="text-[11px] text-slate-400">
+                      {roleResumes.length} saved resume{roleResumes.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  {roleResumes.length === 0 ? (
+                    <div className="p-3 rounded-lg border border-dashed border-amber-300 bg-amber-50/40 text-amber-700 dark:bg-amber-950/20 dark:text-amber-300 text-xs">
+                      No saved role resumes found. Please upload role resumes in Resume Builder first.
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {roleResumes.map((r) => {
+                        const isSelected = directSelectedRoleId === r.id || (!directSelectedRoleId && r.isDefault);
+                        return (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => setDirectSelectedRoleId(r.id)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                              isSelected
+                                ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                                : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400"
+                            }`}
+                          >
+                            <span>{r.role}</span>
+                            {r.isDefault && <span className="text-[10px] opacity-80">(Default)</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <span className="text-xs text-slate-500">
+                    Will match saved role template (or AI draft) & attach selected role resume PDF.
+                  </span>
+                  <button
+                    type="button"
+                    disabled={!directHrEmail || isUploading}
+                    onClick={handleDirectApply}
+                    className="btn px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 shadow-xs"
+                  >
+                    {isUploading ? (
+                      <>
+                        <RotateCcw size={13} className="animate-spin" />
+                        <span>Applying...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={13} />
+                        <span>{workflowMode === "auto" ? "Auto-Send via Gmail" : "Draft & Review Application"}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Dropzone Container */
+              <div
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition-all cursor-pointer ${
+                  dragActive
+                    ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/20"
+                    : "border-slate-300 hover:border-indigo-500 dark:border-slate-700 dark:hover:border-indigo-400 bg-slate-50/50 dark:bg-slate-950/50"
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,application/pdf"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleFileSelected(e.target.files[0])}
+                />
+
+                {filePreview ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <img
+                      src={filePreview}
+                      alt="Poster Preview"
+                      className="max-h-48 rounded-lg object-contain shadow-md border border-slate-200 dark:border-slate-700"
+                    />
+                    <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+                      <span>{selectedFile?.name}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedFile(null);
+                          setFilePreview(null);
+                        }}
+                        className="text-rose-500 hover:text-rose-700"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ) : selectedFile ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400">
+                      <FileText size={28} />
+                    </div>
+                    <span className="text-sm font-semibold">{selectedFile.name}</span>
+                    <span className="text-xs text-slate-400">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</span>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedFile(null);
-                        setFilePreview(null);
                       }}
-                      className="text-rose-500 hover:text-rose-700"
+                      className="mt-1 text-xs text-rose-500 hover:underline"
                     >
-                      <Trash2 size={14} />
+                      Change file
                     </button>
                   </div>
-                </div>
-              ) : selectedFile ? (
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400">
-                    <FileText size={28} />
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 shadow-sm">
+                      <Upload size={24} />
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-semibold">
+                        {inputMode === "email_image"
+                          ? "Drop screenshot of recruiter email or contact info here"
+                          : "Drop full job poster image or PDF here"}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {inputMode === "email_image"
+                          ? "Vision AI will read the recruiter email and link your chosen role resume"
+                          : "Supports PNG, JPG, JPEG, and PDF (Max 15MB)"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="mt-2 rounded-full bg-white px-3.5 py-1.5 text-xs font-semibold shadow-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-800 hover:bg-slate-100"
+                    >
+                      Browse Files
+                    </button>
                   </div>
-                  <span className="text-sm font-semibold">{selectedFile.name}</span>
-                  <span className="text-xs text-slate-400">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedFile(null);
-                    }}
-                    className="mt-1 text-xs text-rose-500 hover:underline"
-                  >
-                    Change file
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 shadow-sm">
-                    <Upload size={24} />
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-semibold">Drop your job poster image or PDF here</p>
-                    <p className="text-xs text-slate-400">Supports PNG, JPG, JPEG, and PDF (Max 15MB)</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="mt-2 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold shadow-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-800 hover:bg-slate-100"
-                  >
-                    Browse Files
-                  </button>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Launch Action Button & View Logs Option */}
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -1702,6 +1868,14 @@ export default function ApplyStudio() {
             </div>
 
             <button
+              onClick={handleResetDefaultWorkflow}
+              className="btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 font-medium shadow-xs"
+              title="Reset to clean default 6-node zigzag DAG pipeline"
+            >
+              <RotateCcw size={13} className="text-amber-500" />
+              <span>Reset Default</span>
+            </button>
+            <button
               onClick={() => setDrawerMode("add")}
               className="btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 font-medium shadow-xs"
             >
@@ -1725,8 +1899,8 @@ export default function ApplyStudio() {
               }}
               className="btn text-xs py-1.5 px-3 flex items-center gap-1.5 font-semibold shadow-xs"
             >
-              <Copy size={13} />
-              <span>Save</span>
+              <Save size={13} />
+              <span>Save Workflow</span>
             </button>
             <button
               onClick={async () => {
@@ -2168,6 +2342,29 @@ export default function ApplyStudio() {
                   {/* Email & Template Settings */}
                   {(selectedNode.data?.category === "email" || selectedNode.type === "generateEmail") && (
                     <div className="space-y-4 rounded-xl border border-sky-200 dark:border-sky-900/50 bg-sky-50/30 dark:bg-sky-950/20 p-4">
+                      {/* Match Saved Templates First Toggle */}
+                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/80 dark:bg-slate-900/70 border border-sky-100 dark:border-sky-900/40">
+                        <div className="pr-3">
+                          <span className="font-bold text-xs text-slate-800 dark:text-slate-200 block">
+                            Match Saved Templates First
+                          </span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                            Agar template nahi mila ya toggle OFF hai, toh AI automatically personalized email draft karega.
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          checked={editFormData.templateMatching !== false}
+                          onChange={(e) =>
+                            setEditFormData((prev) => ({
+                              ...prev,
+                              templateMatching: e.target.checked,
+                            }))
+                          }
+                        />
+                      </div>
+
                       {/* Role Template Matcher */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
@@ -2815,6 +3012,46 @@ export default function ApplyStudio() {
               {/* STEP 1: Extracted Info */}
               {reviewStep === 1 && (
                 <div className="space-y-3">
+                  {/* Target Role Selector from Saved Resumes (for email screenshots or quick role change) */}
+                  {roleResumes.length > 0 && (
+                    <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 dark:border-indigo-900/40 dark:bg-indigo-950/20 p-2.5">
+                      <div className="flex items-center justify-between mb-1.5 text-[11px]">
+                        <span className="font-semibold text-indigo-900 dark:text-indigo-300">
+                          🎯 Target Role (From your saved resumes):
+                        </span>
+                        <span className="text-[10px] text-slate-400">Click to set role & attach resume</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {roleResumes.map((r) => {
+                          const isCurrentRole = editDetails.job_title?.toLowerCase() === r.role.toLowerCase();
+                          return (
+                            <button
+                              key={r.id}
+                              type="button"
+                              onClick={() => {
+                                setEditDetails({
+                                  ...editDetails,
+                                  job_title: r.role,
+                                  required_skills: r.skills || editDetails.required_skills,
+                                });
+                                setSelectedResumeId(r.id);
+                                toast(`Role set to "${r.role}" with matching resume attached!`);
+                              }}
+                              className={`text-[10px] px-2.5 py-1 rounded-full font-semibold border transition-all cursor-pointer ${
+                                isCurrentRole
+                                  ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400"
+                              }`}
+                            >
+                              <span>{r.role}</span>
+                              {r.isDefault && <span className="text-[9px] opacity-80"> (★)</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="font-semibold text-slate-500">Job Title</label>
@@ -3174,6 +3411,54 @@ export default function ApplyStudio() {
                 />
               </div>
             )}
+
+            {/* Linked Recruiter Communications & Replies */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <MessageSquare size={14} className="text-emerald-500" />
+                  <span>Linked Communications ({selectedApp.hrEmail || selectedApp.company})</span>
+                </span>
+                {selectedApp.recruiterReplies && selectedApp.recruiterReplies.length > 0 && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-semibold">
+                    {selectedApp.recruiterReplies.length} reply
+                  </span>
+                )}
+              </div>
+
+              {selectedApp.recruiterReplies && selectedApp.recruiterReplies.length > 0 ? (
+                <div className="space-y-2 mt-1">
+                  {selectedApp.recruiterReplies.map((reply, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-lg border border-emerald-200/60 bg-emerald-50/30 p-2.5 dark:border-emerald-900/50 dark:bg-emerald-950/20"
+                    >
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-1">
+                          <Mail size={12} className="text-emerald-600 dark:text-emerald-400" />
+                          {reply.sender_name || reply.from}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {fmt(reply.received_at || reply.at || "")}
+                        </span>
+                      </div>
+                      <p className="font-medium text-xs text-slate-800 dark:text-slate-200 mt-0.5">
+                        {reply.subject}
+                      </p>
+                      {reply.body_snippet && (
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                          {reply.body_snippet}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-200 dark:border-slate-800 p-2 text-center text-[11px] text-slate-400">
+                  No replies received yet. Actively tracking incoming emails from {selectedApp.hrEmail || selectedApp.company}.
+                </div>
+              )}
+            </div>
 
             {/* Timeline */}
             <div>

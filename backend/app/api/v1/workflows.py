@@ -51,70 +51,78 @@ class ExecuteWorkflowRequest(BaseModel):
 
 
 def get_default_workflow_nodes_and_edges():
-    """Default standard AI application pipeline template arranged in comfortable 2-row layout."""
+    """Default standard AI application pipeline template arranged in alternating zigzag layout matching design."""
     nodes = [
         {
             "id": "node-1",
             "type": "trigger",
-            "position": {"x": 60, "y": 60},
-            "data": {"label": "Job Poster Uploaded", "category": "trigger", "description": "Triggers when image or PDF is uploaded"}
+            "position": {"x": 60, "y": 140},
+            "data": {
+                "label": "Upload Job Poster / Recruiter Email",
+                "category": "trigger",
+                "description": "Trigger: Upload poster, email screenshot, ya direct HR email input"
+            }
         },
         {
             "id": "node-2",
             "type": "analyzeJob",
-            "position": {"x": 440, "y": 60},
-            "data": {"label": "AI Vision Extraction", "category": "ai", "description": "Extracts Company, Role, Skills & HR Email"}
-        },
-        {
-            "id": "node-3",
-            "type": "generateJd",
-            "position": {"x": 820, "y": 60},
-            "data": {"label": "Generate Job Description", "category": "ai", "description": "Builds structured Markdown JD"}
-        },
-        {
-            "id": "node-4",
-            "type": "matchResume",
-            "position": {"x": 1200, "y": 60},
-            "data": {"label": "Match Best Resume", "category": "resume", "description": "5-Factor Weighted Scoring Engine"}
-        },
-        {
-            "id": "node-5",
-            "type": "condition",
-            "position": {"x": 1200, "y": 340},
-            "data": {"label": "Safety Gate Check", "category": "condition", "description": "Verifies valid recruiter HR email presence"}
-        },
-        {
-            "id": "node-6",
-            "type": "generateEmail",
-            "position": {"x": 820, "y": 340},
+            "position": {"x": 420, "y": 380},
             "data": {
-                "label": "Email Drafter (Templates + AI)",
-                "category": "email",
-                "description": "Pehle saved Templates se role match karta hai; na milne par AI email draft karega"
+                "label": "Extracting Job Description",
+                "category": "ai",
+                "description": "OCR Vision se Company, Role, Skills aur Recruiter HR Email extract karta hai"
             }
         },
         {
-            "id": "node-7",
-            "type": "sendGmail",
-            "position": {"x": 440, "y": 340},
-            "data": {"label": "Send via Gmail", "category": "email", "description": "Dispatches email with resume MIME attachment"}
+            "id": "node-3",
+            "type": "matchResume",
+            "position": {"x": 780, "y": 140},
+            "data": {
+                "label": "Match Best Resume by Role",
+                "category": "resume",
+                "description": "Job role ke according saved resumes me se best resume match karta hai"
+            }
         },
         {
-            "id": "node-8",
+            "id": "node-4",
+            "type": "generateEmail",
+            "position": {"x": 1140, "y": 380},
+            "data": {
+                "label": "Email Drafter (Templates + AI)",
+                "category": "email",
+                "description": "Pehle role template match karega; na milne par ya disable hone par AI personalized email draft karega",
+                "use_templates": True,
+                "tone": "formal"
+            }
+        },
+        {
+            "id": "node-5",
+            "type": "sendGmail",
+            "position": {"x": 1500, "y": 140},
+            "data": {
+                "label": "Send via Gmail",
+                "category": "email",
+                "description": "Matched resume PDF attachment ke sath Gmail API se email dispatch karta hai"
+            }
+        },
+        {
+            "id": "node-6",
             "type": "saveApplication",
-            "position": {"x": 60, "y": 340},
-            "data": {"label": "Track Application", "category": "tracking", "description": "Logs application & begins Gmail reply tracking"}
+            "position": {"x": 1860, "y": 380},
+            "data": {
+                "label": "Track Application & Company Replies",
+                "category": "tracking",
+                "description": "Logs application & tracks incoming replies from the same HR email or company"
+            }
         }
     ]
 
     edges = [
-        {"id": "e1-2", "source": "node-1", "target": "node-2", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
-        {"id": "e2-3", "source": "node-2", "target": "node-3", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
-        {"id": "e3-4", "source": "node-3", "target": "node-4", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
-        {"id": "e4-5", "source": "node-4", "target": "node-5", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
-        {"id": "e5-6", "source": "node-5", "target": "node-6", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
-        {"id": "e6-7", "source": "node-6", "target": "node-7", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
-        {"id": "e7-8", "source": "node-7", "target": "node-8", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 3.5}},
+        {"id": "e1-2", "source": "node-1", "target": "node-2", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 2.5}},
+        {"id": "e2-3", "source": "node-2", "target": "node-3", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 2.5}},
+        {"id": "e3-4", "source": "node-3", "target": "node-4", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 2.5}},
+        {"id": "e4-5", "source": "node-4", "target": "node-5", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 2.5}},
+        {"id": "e5-6", "source": "node-5", "target": "node-6", "type": "smoothstep", "animated": True, "style": {"stroke": "#6366f1", "strokeWidth": 2.5}},
     ]
 
     return nodes, edges
@@ -122,15 +130,16 @@ def get_default_workflow_nodes_and_edges():
 
 @router.get("")
 async def list_workflows(user: User = Depends(get_current_user)):
-    """List all workflows for the tenant. Seeds default pipeline if empty."""
+    """List all workflows for the tenant. Seeds or migrates to clean 6-node default DAG if outdated."""
     workflows = await AutomationWorkflow.find(AutomationWorkflow.tenant_id == user.tenant_id).sort("-created_at").to_list()
+    nodes_raw, edges_raw = get_default_workflow_nodes_and_edges()
+
     if not workflows:
-        nodes_raw, edges_raw = get_default_workflow_nodes_and_edges()
         wf = AutomationWorkflow(
             tenant_id=user.tenant_id,
             user_id=user.id,
             name="Automatic Job Application Pipeline",
-            description="End-to-end automation: Upload poster -> Vision OCR -> Match Resume -> Generate Email -> Apply via Gmail -> Track",
+            description="End-to-end automation: Upload -> Vision OCR -> Match Resume by Role -> Email Drafter (Templates+AI) -> Send Gmail -> Track Replies",
             is_active=False,
             trigger_type="JOB_IMAGE_UPLOADED",
             nodes=[WorkflowNode(**n) for n in nodes_raw],
@@ -139,8 +148,50 @@ async def list_workflows(user: User = Depends(get_current_user)):
         )
         await wf.insert()
         workflows = [wf]
+    else:
+        # Auto-upgrade any default workflow still containing obsolete nodes (generateJd or condition)
+        for wf in workflows:
+            node_types = {n.type for n in wf.nodes}
+            if "condition" in node_types or "generateJd" in node_types or len(wf.nodes) > 6:
+                wf.nodes = [WorkflowNode(**n) for n in nodes_raw]
+                wf.edges = [WorkflowEdge(**e) for e in edges_raw]
+                wf.updated_at = datetime.now(timezone.utc)
+                await wf.save()
 
     return workflows
+
+
+@router.post("/reset-default")
+@router.post("/{workflow_id}/reset-default")
+async def reset_workflow_to_default(workflow_id: Optional[str] = None, user: User = Depends(get_current_user)):
+    """Reset a workflow (or tenant's primary workflow) to the default clean 6-node pipeline."""
+    wf = None
+    if workflow_id:
+        wf = await AutomationWorkflow.find_one(AutomationWorkflow.id == workflow_id, AutomationWorkflow.tenant_id == user.tenant_id)
+    if not wf:
+        wf = await AutomationWorkflow.find_one(AutomationWorkflow.tenant_id == user.tenant_id)
+
+    nodes_raw, edges_raw = get_default_workflow_nodes_and_edges()
+    if not wf:
+        wf = AutomationWorkflow(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            name="Automatic Job Application Pipeline",
+            description="End-to-end automation: Upload -> Vision OCR -> Match Resume by Role -> Email Drafter (Templates+AI) -> Send Gmail -> Track Replies",
+            is_active=False,
+            trigger_type="JOB_IMAGE_UPLOADED",
+            nodes=[WorkflowNode(**n) for n in nodes_raw],
+            edges=[WorkflowEdge(**e) for e in edges_raw],
+            settings=WorkflowSettings(min_match_score=0, auto_send=False, fallback_to_manual=True)
+        )
+        await wf.insert()
+    else:
+        wf.nodes = [WorkflowNode(**n) for n in nodes_raw]
+        wf.edges = [WorkflowEdge(**e) for e in edges_raw]
+        wf.updated_at = datetime.now(timezone.utc)
+        await wf.save()
+
+    return wf
 
 
 @router.post("")

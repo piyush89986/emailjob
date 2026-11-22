@@ -172,6 +172,7 @@ class ApplicationResponse(CamelModel):
     gmail_thread_id: Optional[str] = Field(default=None, alias="gmailThreadId")
     created_at: Optional[str] = Field(default=None, alias="createdAt")
     timeline: List[TimelineEntry] = Field(default_factory=list)
+    recruiter_replies: List[Dict[str, Any]] = Field(default_factory=list, alias="recruiterReplies")
 
 
 class ApplicationCreateRequest(CamelModel):

@@ -224,13 +224,14 @@ class TemplateMatcher:
         matching_skills: Optional[List[str]] = None,
         match_score: Optional[int] = None,
         tone: str = "formal",
-        preferred_template_id: Optional[str] = None
+        preferred_template_id: Optional[str] = None,
+        use_templates: bool = True
     ) -> Dict[str, Any]:
         """Core application email composer.
 
-        1. Searches user's saved email templates for matching role.
+        1. If use_templates is True, searches user's saved email templates for matching role.
         2. If found -> populates template variables.
-        3. If not found -> generates personalized application email via AI.
+        3. If not found or use_templates is False -> generates personalized application email via AI.
         """
         # Fetch profile and user for candidate info safely
         profile = await Profile.find_one(Profile.tenant_id == tenant_id)
@@ -291,12 +292,15 @@ class TemplateMatcher:
             "score": score_val,
         }
 
-        # Step 1: Attempt template match
-        matched_tpl, match_score_metric = await cls.find_best_template_for_role(
-            tenant_id=tenant_id,
-            role_title=title,
-            preferred_template_id=preferred_template_id
-        )
+        # Step 1: Attempt template match (if user has enabled templates)
+        matched_tpl = None
+        match_score_metric = 0.0
+        if use_templates:
+            matched_tpl, match_score_metric = await cls.find_best_template_for_role(
+                tenant_id=tenant_id,
+                role_title=title,
+                preferred_template_id=preferred_template_id
+            )
 
         if matched_tpl:
             log.info(

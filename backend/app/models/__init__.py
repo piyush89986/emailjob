@@ -17,6 +17,9 @@ from app.models.audit_log import AuditLog
 from app.models.job_poster import JobPoster
 from app.models.workflow import AutomationWorkflow, WorkflowExecution
 from app.models.hr_inbox import HRInbox
+from app.models.hub import HubPost, HubChatMessage
+from app.models.feedback import Feedback
+from app.models.access_request import AccessRequest
 
 ALL_DOCUMENT_MODELS = [
     Tenant,
@@ -38,6 +41,10 @@ ALL_DOCUMENT_MODELS = [
     AutomationWorkflow,
     WorkflowExecution,
     HRInbox,
+    HubPost,
+    HubChatMessage,
+    Feedback,
+    AccessRequest,
 ]
 
 __all__ = [
@@ -60,5 +67,9 @@ __all__ = [
     "AutomationWorkflow",
     "WorkflowExecution",
     "HRInbox",
+    "HubPost",
+    "HubChatMessage",
+    "Feedback",
+    "AccessRequest",
     "ALL_DOCUMENT_MODELS",
 ]

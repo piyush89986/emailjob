@@ -37,6 +37,9 @@ from app.api.v1.role_resumes import router as role_resumes_router
 from app.api.v1.apply_studio import router as apply_studio_router
 from app.api.v1.workflows import router as workflows_router
 from app.api.v1.hr_inbox import router as hr_inbox_router
+from app.api.v1.hub import router as hub_router
+from app.api.v1.feedback import router as feedback_router
+from app.api.v1.access import router as access_router
 
 settings = get_settings()
 setup_logging()
@@ -207,3 +210,9 @@ app.include_router(workflows_router)
 app.include_router(workflows_router, prefix="/api")
 app.include_router(hr_inbox_router)
 app.include_router(hr_inbox_router, prefix="/api")
+app.include_router(hub_router)
+app.include_router(hub_router, prefix="/api")
+app.include_router(feedback_router)
+app.include_router(feedback_router, prefix="/api")
+app.include_router(access_router)
+app.include_router(access_router, prefix="/api")

@@ -11,6 +11,7 @@ import Templates from "@/pages/Templates";
 import Contacts from "@/pages/Contacts";
 import Applications from "@/pages/Applications";
 import ApplyStudio from "@/pages/ApplyStudio";
+import Hub from "@/pages/Hub";
 import ResumeBuilder from "@/pages/ResumeBuilder";
 import Settings from "@/pages/Settings";
 import { useS, loadInitialData } from "@/lib/store";
@@ -51,7 +52,7 @@ function App() {
       <Routes>
         <Route path="/login" element={<Auth mode="login" />} /><Route path="/signup" element={<Auth mode="signup" />} />
         <Route element={<Protected><Layout /></Protected>}>
-          <Route path="/" element={<Dashboard />} /><Route path="/apply-studio" element={<ApplyStudio />} /><Route path="/hr-inbox" element={<HRInbox />} /><Route path="/inbox" element={<Inbox />} /><Route path="/compose" element={<Compose />} />
+          <Route path="/" element={<Dashboard />} /><Route path="/apply-studio" element={<ApplyStudio />} /><Route path="/hub" element={<Hub />} /><Route path="/hr-inbox" element={<HRInbox />} /><Route path="/inbox" element={<Inbox />} /><Route path="/compose" element={<Compose />} />
           <Route path="/templates" element={<Templates />} /><Route path="/contacts" element={<Contacts />} /><Route path="/applications" element={<Applications />} />
           <Route path="/resume" element={<ResumeBuilder />} /><Route path="/settings" element={<Settings />} />
         </Route>

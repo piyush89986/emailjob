@@ -40,6 +40,17 @@ class GenerateEmailRequest(BaseModel):
     resume_id: Optional[str] = None
     template_id: Optional[str] = None
     tone: str = "formal"  # "formal" | "friendly" | "concise"
+    use_templates: Optional[bool] = True
+
+
+class DirectJobEntryRequest(BaseModel):
+    hr_email: str
+    job_title: str
+    company_name: Optional[str] = None
+    role_resume_id: Optional[str] = None
+    tone: Optional[str] = "formal"
+    template_id: Optional[str] = None
+    use_templates: Optional[bool] = True
 
 
 class SendApplicationRequest(BaseModel):
@@ -171,6 +182,28 @@ async def upload_job_poster(
             poster.extracted_data = extracted
             poster.generated_jd = JobPosterAnalyzer.generate_structured_jd(extracted)
             poster.status = "extracted"
+
+            # Auto-post to Community Hub
+            if extracted and extracted.hr_email:
+                try:
+                    from app.models.hub import HubPost
+                    hub_post = HubPost(
+                        tenant_id=tenant_id,
+                        user_id=user.id,
+                        user_name=user.full_name or user.email.split("@")[0],
+                        user_email=user.email,
+                        post_type="poster",
+                        title=extracted.job_title or "Job Opening",
+                        company=extracted.company_name or "Hiring Company",
+                        hr_email=extracted.hr_email,
+                        location=extracted.location,
+                        skills=extracted.required_skills or [],
+                        jd=poster.generated_jd,
+                        image_url=poster.file_url if poster.storage_type == "cloudinary" else None
+                    )
+                    await hub_post.insert()
+                except Exception as he:
+                    log.warning("hub_auto_post_failed", error=str(he))
         except Exception as e:
             poster.status = "failed"
             poster.error_message = str(e)
@@ -369,13 +402,128 @@ async def generate_email_endpoint(
         hr_email=details.hr_email,
         matching_skills=details.required_skills,
         tone=req.tone,
-        preferred_template_id=req.template_id
+        preferred_template_id=req.template_id,
+        use_templates=req.use_templates if req.use_templates is not None else True
     )
 
     return {
         **composed,
         "resume_name": resume_name,
         "resume_attachment_id": resume_attachment_id
+    }
+
+
+@router.post("/direct-entry")
+async def direct_job_entry_endpoint(
+    req: DirectJobEntryRequest,
+    user: User = Depends(get_current_user)
+):
+    """Create a structured job application directly from HR email, chosen role, and optional company.
+    
+    Prompts/uses saved role resumes, selects matching resume and email template (or AI draft).
+    """
+    clean_email = (req.hr_email or "").strip().lower()
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail="Valid HR / Recruiter email is required")
+
+    job_title = (req.job_title or "").strip()
+    if not job_title:
+        raise HTTPException(status_code=400, detail="Target job role is required")
+
+    # Determine company name: use provided or derive from domain
+    company_name = (req.company_name or "").strip()
+    if not company_name:
+        domain_part = clean_email.split("@")[-1].split(".")[0].capitalize()
+        if domain_part.lower() in ["gmail", "yahoo", "outlook", "hotmail", "proton", "icloud"]:
+            company_name = "Hiring Team"
+        else:
+            company_name = domain_part
+
+    # Locate role resume
+    selected_resume: Optional[RoleResume] = None
+    if req.role_resume_id:
+        selected_resume = await RoleResume.find_one(RoleResume.id == req.role_resume_id, RoleResume.tenant_id == user.tenant_id)
+    if not selected_resume:
+        # Match by role title
+        selected_resume = await RoleResume.find_one(
+            RoleResume.tenant_id == user.tenant_id,
+            {"role": {"$regex": f"^{re.escape(job_title)}$", "$options": "i"}}
+        )
+    if not selected_resume:
+        selected_resume = await RoleResume.find_one(RoleResume.tenant_id == user.tenant_id, RoleResume.is_default == True) or await RoleResume.find_one(RoleResume.tenant_id == user.tenant_id)
+
+    skills = selected_resume.skills if selected_resume and selected_resume.skills else []
+
+    extracted_details = ExtractedJobDetails(
+        company_name=company_name,
+        job_title=job_title,
+        hr_email=clean_email,
+        required_skills=skills,
+        confidence_score=1.0,
+        requires_manual_verification=False,
+        raw_text=f"Direct recruiter outreach for {job_title} at {company_name}"
+    )
+
+    generated_jd = f"# {job_title}\n\n**Company:** {company_name}\n**Recruiter Email:** {clean_email}\n\nTarget outreach for candidate specializing in {', '.join(skills[:5]) if skills else 'modern technical skills'}."
+
+    poster = JobPoster(
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        filename=f"Direct Outreach - {job_title} ({company_name})",
+        content_type="text/plain",
+        size_bytes=len(generated_jd),
+        file_url="",
+        storage_type="direct",
+        extracted_data=extracted_details,
+        generated_jd=generated_jd,
+        status="extracted"
+    )
+    await poster.save()
+
+    # Auto-post direct email job to Community Hub
+    try:
+        from app.models.hub import HubPost
+        hub_post = HubPost(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            user_name=user.full_name or user.email.split("@")[0],
+            user_email=user.email,
+            post_type="direct_email",
+            title=job_title,
+            company=company_name,
+            hr_email=clean_email,
+            skills=skills,
+            jd=generated_jd,
+            image_url=None
+        )
+        await hub_post.insert()
+    except Exception as he:
+        log.warning("hub_direct_auto_post_failed", error=str(he))
+
+    # Pre-compose email
+    composed = await TemplateMatcher.compose_email(
+        tenant_id=user.tenant_id,
+        job_title=job_title,
+        company_name=company_name,
+        hr_name=None,
+        hr_email=clean_email,
+        matching_skills=skills,
+        tone=req.tone or "formal",
+        preferred_template_id=req.template_id,
+        use_templates=req.use_templates if req.use_templates is not None else True
+    )
+
+    resume_name = f"{selected_resume.role} Resume" if selected_resume else "Resume"
+    resume_attachment_id = selected_resume.attachment_id if selected_resume else None
+
+    return {
+        "poster": poster.model_dump(),
+        "email_draft": {
+            **composed,
+            "resume_name": resume_name,
+            "resume_attachment_id": resume_attachment_id
+        },
+        "selected_resume_id": selected_resume.id if selected_resume else None
     }
 
 
