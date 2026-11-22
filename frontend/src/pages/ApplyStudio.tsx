@@ -1551,13 +1551,13 @@ export default function ApplyStudio() {
               <button
                 type="button"
                 onClick={() => setShowLiveAudit(true)}
-                className="btn text-xs py-2 px-3.5 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 rounded-xl shadow-xs"
+                className="btn-ghost text-xs py-1.5 px-3.5 flex items-center gap-2 shadow-xs"
                 title="Open Live Automation & Diagnostic Logs"
               >
                 <Terminal size={14} className="text-indigo-500" />
                 <span className="font-semibold">View Automation Logs</span>
                 {pipelineLogs.length > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.5 bg-slate-200 dark:bg-slate-700 rounded-full font-mono text-slate-600 dark:text-slate-300">
+                  <span className="text-[10px] px-1.5 py-0.2 bg-slate-200 dark:bg-slate-700 rounded-full font-mono text-slate-600 dark:text-slate-300">
                     {pipelineLogs.length} events
                   </span>
                 )}
@@ -1568,10 +1568,10 @@ export default function ApplyStudio() {
                   <button
                     type="button"
                     onClick={handleStopAutomation}
-                    className="btn text-xs py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white font-bold flex items-center gap-1.5 rounded-xl shadow-xs transition-all"
+                    className="btn-danger text-xs py-1.5 px-3 font-semibold flex items-center gap-1.5 shadow-xs transition-all"
                     title="Stop ongoing automation immediately"
                   >
-                    <Square size={12} className="fill-white" />
+                    <Square size={12} className="fill-current" />
                     <span>Stop</span>
                   </button>
                 )}
@@ -1579,27 +1579,27 @@ export default function ApplyStudio() {
                 <button
                   disabled={!selectedFile || isUploading}
                   onClick={handleAnalyzeAndLaunch}
-                className={`btn flex items-center gap-2 px-5 py-2.5 font-bold text-sm shadow-md transition-all ${
-                  workflowMode === "auto"
-                    ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
-                    : "btn-primary shadow-indigo-600/20"
-                }`}
-              >
-                {isUploading ? (
-                  <>
-                    <RotateCcw size={16} className="animate-spin" />
-                    <span>{workflowMode === "auto" ? "Analyzing & Auto-Sending via Gmail..." : "Analyzing with Vision AI..."}</span>
-                  </>
-                ) : (
-                  <>
-                    {workflowMode === "auto" ? <Zap size={16} /> : <Sparkles size={16} />}
-                    <span>{workflowMode === "auto" ? "Analyze Job & Send Automatically (1-Click)" : "Analyze Job & Generate Application"}</span>
-                  </>
-                )}
-              </button>
+                  className={`btn flex items-center gap-2 px-4 py-1.5 font-semibold text-xs shadow-xs transition-all ${
+                    workflowMode === "auto"
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : ""
+                  }`}
+                >
+                  {isUploading ? (
+                    <>
+                      <RotateCcw size={14} className="animate-spin" />
+                      <span>{workflowMode === "auto" ? "Analyzing & Auto-Sending via Gmail..." : "Analyzing with Vision AI..."}</span>
+                    </>
+                  ) : (
+                    <>
+                      {workflowMode === "auto" ? <Zap size={14} /> : <Sparkles size={14} />}
+                      <span>{workflowMode === "auto" ? "Analyze Job & Send Automatically (1-Click)" : "Analyze Job & Generate Application"}</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
           {/* Recent Uploaded Posters Carousel / Grid */}
           <div>
@@ -1703,9 +1703,9 @@ export default function ApplyStudio() {
 
             <button
               onClick={() => setDrawerMode("add")}
-              className="btn text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 shadow-xs"
+              className="btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 font-medium shadow-xs"
             >
-              <Plus size={15} />
+              <Plus size={14} />
               <span>Add Node</span>
             </button>
             <button
@@ -1723,9 +1723,9 @@ export default function ApplyStudio() {
                   });
                 }
               }}
-              className="btn btn-primary text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold shadow-xs"
+              className="btn text-xs py-1.5 px-3 flex items-center gap-1.5 font-semibold shadow-xs"
             >
-              <Copy size={14} />
+              <Copy size={13} />
               <span>Save</span>
             </button>
             <button
@@ -1735,14 +1735,14 @@ export default function ApplyStudio() {
                   setExecutionLogs(exec);
                 }
               }}
-              className="btn text-xs py-2 px-3.5 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-slate-800 dark:text-slate-100 shadow-xs"
+              className="btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 font-medium shadow-xs"
             >
               <Play size={13} className="text-emerald-500" />
               <span>Test Run</span>
             </button>
             <button
               onClick={() => setShowLiveAudit(true)}
-              className="btn text-xs py-2 px-3 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-slate-800 dark:text-slate-100 shadow-xs"
+              className="btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 font-medium shadow-xs"
               title="Open Live Automation & Diagnostic Logs"
             >
               <Terminal size={14} className="text-indigo-500" />
@@ -2296,13 +2296,13 @@ export default function ApplyStudio() {
                 <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex items-center justify-between">
                   <button
                     onClick={() => setDrawerMode("none")}
-                    className="btn text-xs py-2 px-4 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold"
+                    className="btn-ghost text-xs py-1.5 px-4 font-medium"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleUpdateNodeFromDrawer}
-                    className="btn text-xs py-2 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+                    className="btn text-xs py-1.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-1.5 shadow-xs"
                   >
                     <CheckCircle2 size={14} />
                     <span>Update Node</span>
@@ -2709,7 +2709,7 @@ export default function ApplyStudio() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setShowLiveAudit(false)}
-                  className="btn text-xs py-2 px-4 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="btn-ghost text-xs py-1.5 px-3.5 font-medium"
                 >
                   Close Logs
                 </button>
@@ -2717,10 +2717,10 @@ export default function ApplyStudio() {
                 {livePipelineStatus === "running" && (
                   <button
                     onClick={handleStopAutomation}
-                    className="btn text-xs py-2 px-3.5 bg-rose-600 hover:bg-rose-700 text-white font-bold flex items-center gap-1.5 shadow-sm shadow-rose-600/20"
+                    className="btn-danger text-xs py-1.5 px-3 font-semibold flex items-center gap-1.5 shadow-xs"
                     title="Stop ongoing automation pipeline"
                   >
-                    <Square size={12} className="fill-white" />
+                    <Square size={12} className="fill-current" />
                     <span>Stop Automation</span>
                   </button>
                 )}
@@ -2734,7 +2734,7 @@ export default function ApplyStudio() {
                       setShowLiveAudit(false);
                       setReviewStep(1);
                     }}
-                    className="btn text-xs py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 shadow-md shadow-amber-600/20"
+                    className="btn text-xs py-1.5 px-4 bg-amber-600 hover:bg-amber-700 text-white font-semibold flex items-center gap-1.5 shadow-xs"
                   >
                     <span>Review & Fix in Studio</span>
                     <ArrowRight size={13} />
@@ -2748,7 +2748,7 @@ export default function ApplyStudio() {
                       setShowLiveAudit(false);
                       setReviewStep(1);
                     }}
-                    className="btn btn-primary text-xs py-2 px-5 font-bold flex items-center gap-1.5 shadow-md"
+                    className="btn text-xs py-1.5 px-4 font-semibold flex items-center gap-1.5 shadow-xs"
                   >
                     <span>Proceed to Review & Send</span>
                     <ArrowRight size={13} />
@@ -2762,7 +2762,7 @@ export default function ApplyStudio() {
                       setShowLiveAudit(false);
                       setActiveTab("history");
                     }}
-                    className="btn text-xs py-2 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+                    className="btn text-xs py-1.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-1.5 shadow-xs"
                   >
                     <span>View in Application Tracker</span>
                     <ArrowRight size={13} />
@@ -3068,7 +3068,7 @@ export default function ApplyStudio() {
               <button
                 disabled={reviewStep === 1 || isProcessing}
                 onClick={() => setReviewStep((s) => (s > 1 ? ((s - 1) as any) : s))}
-                className="btn text-xs py-1.5 px-3 flex items-center gap-1"
+                className="btn-ghost text-xs py-1.5 px-3 flex items-center gap-1 font-medium"
               >
                 <ChevronLeft size={14} /> Back
               </button>
@@ -3085,39 +3085,42 @@ export default function ApplyStudio() {
                       }
                       setReviewStep(2);
                     }}
-                    className="btn btn-primary text-xs py-1.5 px-4 font-semibold"
+                    className="btn text-xs py-1.5 px-3.5 font-semibold flex items-center gap-1 shadow-xs"
                   >
-                    Next: Job Description <ChevronRight size={14} />
+                    <span>Next: Job Description</span>
+                    <ChevronRight size={14} />
                   </button>
                 )}
                 {reviewStep === 2 && (
                   <button
                     disabled={isProcessing}
                     onClick={goToResumeStep}
-                    className="btn btn-primary text-xs py-1.5 px-4 font-semibold flex items-center gap-1.5"
+                    className="btn text-xs py-1.5 px-3.5 font-semibold flex items-center gap-1.5 shadow-xs"
                   >
                     {isProcessing ? <RotateCcw size={14} className="animate-spin" /> : null}
-                    Next: Match Resume <ChevronRight size={14} />
+                    <span>Next: Match Resume</span>
+                    <ChevronRight size={14} />
                   </button>
                 )}
                 {reviewStep === 3 && (
                   <button
                     disabled={isProcessing}
                     onClick={goToEmailStep}
-                    className="btn btn-primary text-xs py-1.5 px-4 font-semibold flex items-center gap-1.5"
+                    className="btn text-xs py-1.5 px-3.5 font-semibold flex items-center gap-1.5 shadow-xs"
                   >
                     {isProcessing ? <RotateCcw size={14} className="animate-spin" /> : null}
-                    Next: Generate Email <ChevronRight size={14} />
+                    <span>Next: Generate Email</span>
+                    <ChevronRight size={14} />
                   </button>
                 )}
                 {reviewStep === 4 && (
                   <button
                     disabled={isProcessing || !emailTo}
                     onClick={handleSendApplication}
-                    className="btn btn-primary text-xs py-2 px-5 font-bold flex items-center gap-1.5 shadow-md bg-emerald-600 hover:bg-emerald-700"
+                    className="btn text-xs py-1.5 px-4 font-semibold flex items-center gap-1.5 shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white"
                   >
-                    {isProcessing ? <RotateCcw size={14} className="animate-spin" /> : <Send size={14} />}
-                    Send Application via Gmail
+                    {isProcessing ? <RotateCcw size={14} className="animate-spin" /> : <Send size={13} />}
+                    <span>Send Application via Gmail</span>
                   </button>
                 )}
               </div>

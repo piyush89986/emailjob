@@ -175,7 +175,7 @@ export function ProfileEditor() {
           <input className="input" value={p.links} onChange={(e) => up({ links: e.target.value })} placeholder="github.com/yourname, linkedin.com/in/..." />
         </div>
         <div className="md:col-span-2 mt-2">
-          <button className="btn" onClick={() => saveProfile(p)}>
+          <button className="btn text-xs py-1.5 px-4 font-semibold shadow-xs" onClick={() => saveProfile(p)}>
             Save Master Profile
           </button>
         </div>
@@ -364,7 +364,7 @@ function RoleResumeManager() {
           </div>
 
           <div className="flex justify-end pt-2">
-            <button type="submit" className="btn" disabled={uploading}>
+            <button type="submit" className="btn text-xs py-1.5 px-4 font-semibold shadow-xs" disabled={uploading}>
               {uploading ? "Uploading..." : "Upload Resume"}
             </button>
           </div>
@@ -452,14 +452,14 @@ function RoleResumeManager() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => openResume(r)}
-                      className="btn-ghost py-1 px-2.5 inline-flex items-center gap-1"
+                      className="btn-ghost text-xs py-1 px-3 inline-flex items-center gap-1 font-medium"
                     >
                       <ExternalLink size={13} /> View / Download
                     </button>
                     {!r.isDefault && (
                       <button
                         onClick={() => setDefaultRoleResume(r.id)}
-                        className="btn-ghost py-1 px-2.5 text-slate-600 hover:text-slate-900"
+                        className="btn-ghost text-xs py-1 px-3 text-slate-600 hover:text-slate-900 font-medium"
                         title="Make this the default resume when applying for this role"
                       >
                         Make Default

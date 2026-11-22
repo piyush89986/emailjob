@@ -271,10 +271,10 @@ export default function Compose() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button className="btn" onClick={send}>
+            <button className="btn text-xs py-1.5 px-4 font-semibold shadow-xs" onClick={send}>
               Send email
             </button>
-            <button className="btn-ghost" onClick={() => toast("Draft saved")}>
+            <button className="btn-ghost text-xs py-1.5 px-3.5" onClick={() => toast("Draft saved")}>
               Save draft
             </button>
           </div>
@@ -284,7 +284,7 @@ export default function Compose() {
         </div>
 
         <div className="card space-y-3">
-          <h2 className="font-medium">AI: draft from job description</h2>
+          <h2 className="font-semibold text-sm text-slate-900 dark:text-white">AI: draft from job description</h2>
           <textarea
             className="input"
             rows={6}
@@ -292,15 +292,15 @@ export default function Compose() {
             value={jd}
             onChange={(e) => setJd(e.target.value)}
           />
-          <button className="btn w-full" onClick={gen} disabled={generating}>
+          <button className="btn text-xs py-2 px-4 w-full font-semibold shadow-xs" onClick={gen} disabled={generating}>
             {generating ? "AI Generating..." : "Generate email variants"}
           </button>
           {variants.map((v) => (
-            <div key={v.label} className="rounded-md border border-slate-200 p-2 text-sm dark:border-slate-700">
-              <div className="font-medium">{v.label}</div>
-              <div className="text-xs text-slate-500 truncate">{v.subject}</div>
+            <div key={v.label} className="rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 space-y-1">
+              <div className="font-semibold text-slate-900 dark:text-white">{v.label}</div>
+              <div className="text-[11px] text-slate-500 truncate">{v.subject}</div>
               <button
-                className="btn-ghost mt-1 text-xs"
+                className="btn-ghost text-[11px] py-1 px-3 mt-1 font-semibold"
                 onClick={() => {
                   setSubject(v.subject);
                   setBody(v.body);

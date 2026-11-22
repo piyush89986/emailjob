@@ -141,3 +141,11 @@ Follow these steps to connect production third-party APIs:
 ### 4. Databases
 * **MongoDB Atlas:** Create a free M0 or paid cluster. Click **Connect** -> **Drivers** and set `MONGO_URI`.
 * **Redis:** Create a serverless Redis database on [Upstash](https://upstash.com) or [Redis Cloud](https://redis.io) and set `REDIS_URL`.
+
+
+
+
+email validation 
+configure nodes
+upload image , text , just an image of gmail ,
+theme 

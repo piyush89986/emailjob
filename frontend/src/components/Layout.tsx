@@ -80,11 +80,13 @@ export default function Layout() {
             {/* Header row: on desktop JobMail; on mobile JobMail + actions */}
             <div className={`mb-3 flex items-center ${collapsed ? "justify-center" : "justify-between"}`}>
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white text-sm shadow-sm shrink-0">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-600 to-violet-600 font-bold text-white text-xs shadow-xs shrink-0">
                   J
                 </div>
                 {!collapsed && (
-                  <span className="text-lg font-bold tracking-tight truncate">BJob</span>
+                  <span className="text-base font-bold tracking-tight truncate text-slate-900 dark:text-white">
+                    BJob
+                  </span>
                 )}
               </div>
 
@@ -117,11 +119,11 @@ export default function Layout() {
                   title={collapsed ? label : undefined}
                   className={({ isActive }) =>
                     `relative flex shrink-0 items-center ${
-                      collapsed ? "md:justify-center md:px-2" : "gap-2.5 px-2.5"
-                    } rounded-lg py-2 text-sm font-medium transition-colors ${
+                      collapsed ? "md:justify-center md:px-2" : "gap-2.5 px-3"
+                    } rounded-xl py-2 text-xs md:text-[13px] font-medium transition-all duration-150 ${
                       isActive
-                        ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400 font-semibold"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                        ? "bg-indigo-50/90 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300 font-semibold shadow-2xs"
+                        : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/80 dark:hover:text-slate-200"
                     }`
                   }
                 >

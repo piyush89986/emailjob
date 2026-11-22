@@ -202,15 +202,15 @@ export default function Inbox() {
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
-          <div className="shrink-0 mb-2.5 flex gap-1 overflow-x-auto pb-1">
+          <div className="shrink-0 mb-2.5 flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar">
             {["all", "replied", "waiting", "bounced"].map((x) => (
               <button
                 key={x}
                 onClick={() => setF(x)}
-                className={`rounded-full px-3 py-1 text-xs capitalize shrink-0 font-medium transition-colors ${
+                className={`rounded-full px-3 py-1 text-xs capitalize shrink-0 font-medium transition-all duration-150 ${
                   f === x
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    ? "bg-indigo-600 text-white shadow-xs font-semibold"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-800/80 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 }`}
               >
                 {x}
@@ -342,9 +342,9 @@ export default function Inbox() {
                   }}
                 />
                 <div className="mt-2 flex items-center justify-between">
-                  <span className="text-xs text-slate-400">Ctrl+Enter to send</span>
+                  <span className="text-[11px] text-slate-400">Ctrl+Enter to send</span>
                   <button
-                    className="btn shrink-0"
+                    className="btn text-xs py-1.5 px-3.5 shrink-0 font-semibold shadow-xs"
                     onClick={send}
                     disabled={!reply.trim()}
                   >
