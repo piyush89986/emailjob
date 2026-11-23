@@ -287,6 +287,13 @@ class RoleResumeRepo(TenantRepository[RoleResume]):
     async def list_by_tenant(self) -> List[RoleResume]:
         return await self.find_all(sort=[("created_at", DESCENDING)])
 
+    async def list_by_user_or_tenant(self, user_id: Optional[str] = None) -> List[RoleResume]:
+        if user_id:
+            user_resumes = await self.find_all(RoleResume.user_id == user_id, sort=[("created_at", DESCENDING)])
+            if user_resumes:
+                return user_resumes
+        return await self.list_by_tenant()
+
     async def find_by_role(self, role: str) -> List[RoleResume]:
         return await self.find_all(RoleResume.role == role, sort=[("created_at", DESCENDING)])
 

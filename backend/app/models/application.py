@@ -10,6 +10,7 @@ from pydantic import Field
 class Application(Document):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     tenant_id: str
+    user_id: Optional[str] = None
     title: str
     company: str
     jd: str = ""
@@ -43,6 +44,7 @@ class Application(Document):
         name = "applications"
         indexes = [
             IndexModel([("tenant_id", ASCENDING)]),
+            IndexModel([("user_id", ASCENDING)]),
             IndexModel([("tenant_id", ASCENDING), ("contact_id", ASCENDING)]),
             IndexModel([("tenant_id", ASCENDING), ("status", ASCENDING)]),
             IndexModel([("tenant_id", ASCENDING), ("gmail_thread_id", ASCENDING)]),

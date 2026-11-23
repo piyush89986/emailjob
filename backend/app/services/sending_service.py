@@ -157,10 +157,33 @@ class SendingService:
         # Prepare attachments
         attachments_data: List[Dict[str, Any]] = []
         for att_id in message.attachment_ids:
-            att_info = await StorageService.get_attachment_data(tenant_id, att_id)
+            att_info = await StorageService.get_attachment_data(tenant_id, att_id, user_id=message.user_id)
             if att_info:
                 filename, ctype, raw_data = att_info
                 attachments_data.append({"filename": filename, "content_type": ctype, "data": raw_data})
+
+        # CRITICAL SAFETY GUARD: If application email mentions an attached resume but has no attachments,
+        # automatically resolve from candidate's RoleResume or Profile so HR always receives the resume PDF!
+        if not attachments_data and any(kw in (message.subject + " " + message.body).lower() for kw in ["resume", "cv", "attached", "application", "applying"]):
+            log.warning("application_email_missing_attachment_running_safety_guard", message_id=message_id, tenant_id=tenant_id)
+            from app.models.role_resume import RoleResume
+            fallback_res = None
+            if message.user_id:
+                fallback_res = (
+                    await RoleResume.find_one(RoleResume.user_id == message.user_id, RoleResume.is_default == True)
+                    or await RoleResume.find_one(RoleResume.user_id == message.user_id)
+                )
+            if not fallback_res:
+                fallback_res = (
+                    await RoleResume.find_one(RoleResume.tenant_id == tenant_id, RoleResume.is_default == True)
+                    or await RoleResume.find_one(RoleResume.tenant_id == tenant_id)
+                )
+            fallback_id = fallback_res.id if fallback_res else "profile_fallback"
+            att_info = await StorageService.get_attachment_data(tenant_id, fallback_id, user_id=message.user_id)
+            if att_info:
+                filename, ctype, raw_data = att_info
+                attachments_data.append({"filename": filename, "content_type": ctype, "data": raw_data})
+                log.info("safety_attachment_attached_successfully", filename=filename, size=len(raw_data))
 
         # Follow-up headers (In-Reply-To & References)
         in_reply_to: Optional[str] = None

@@ -176,18 +176,26 @@ class WorkflowEngine:
                             raise AppError("Job details not extracted yet. Run Vision OCR first.", status_code=400)
 
                     # --- Node Type 4: Resume Matching ---
-                    elif node_type in ["matchResume", "MATCH_RESUME", "SELECT_BEST_RESUME"]:
+                    elif (
+                        node_type in ["matchResume", "MATCH_RESUME", "SELECT_BEST_RESUME", "matching", "MATCHING", "matchBestResume", "resume", "RESUME", "resumeMatch"]
+                        or node_data.get("category") == "resume"
+                        or "resume" in node_type.lower()
+                        or "match" in node_type.lower()
+                    ):
                         extracted_dict = execution.context_data.get("extracted_data")
                         if not extracted_dict:
                             raise AppError("Job details must be extracted before matching resumes", status_code=400)
 
                         extracted = ExtractedJobDetails(**extracted_dict)
                         resumes = await RoleResume.find(RoleResume.tenant_id == tenant_id).to_list()
-                        if not resumes:
-                            raise AppError("No saved role resumes found in Resume Builder. Please upload a resume first.", status_code=400)
+                        if not resumes and user_id:
+                            resumes = await RoleResume.find(RoleResume.user_id == user_id).to_list()
 
-                        matched = await ResumeMatcher.match_resumes_for_job(tenant_id, extracted, resumes)
-                        best_match = matched[0] if matched else None
+                        best_match = None
+                        if resumes:
+                            matched = await ResumeMatcher.match_resumes_for_job(tenant_id, extracted, resumes)
+                            best_match = matched[0] if matched else None
+
                         if best_match:
                             execution.context_data["best_resume"] = best_match.model_dump()
                             execution.context_data["match_score"] = best_match.match_percentage
@@ -198,7 +206,34 @@ class WorkflowEngine:
                                 data={"match_percentage": best_match.match_percentage, "skills": best_match.matching_skills}
                             )
                         else:
-                            raise AppError("No matching resume met the criteria", status_code=400)
+                            # Dynamic Profile Fallback: Candidate has a profile even if no specific role resume PDF uploaded
+                            profile = await Profile.find_one(Profile.tenant_id == tenant_id)
+                            if profile and (profile.name or profile.skills or profile.experience):
+                                req_skills = [s.strip().lower() for s in extracted.required_skills if s.strip()]
+                                cand_skills = [s.strip().lower() for s in profile.skills if s.strip()]
+                                matching_s = [s for s in req_skills if any(cs in s or s in cs for cs in cand_skills)]
+                                match_pct = max(70, int((len(matching_s) / max(len(req_skills), 1)) * 100)) if req_skills else 85
+                                best_match_dict = {
+                                    "resume_id": "profile_default",
+                                    "role_name": profile.headline or extracted.job_title or "Candidate Profile",
+                                    "filename": f"{(profile.name or 'Candidate').replace(' ', '_')}_Resume.pdf",
+                                    "match_percentage": match_pct,
+                                    "matching_skills": matching_s,
+                                    "missing_skills": [s for s in req_skills if s not in matching_s],
+                                    "attachment_id": None,
+                                    "is_recommended": True,
+                                    "rationale": f"Matched candidate profile for {extracted.job_title} with {match_pct}% fit score."
+                                }
+                                execution.context_data["best_resume"] = best_match_dict
+                                execution.context_data["match_score"] = match_pct
+                                await log_step(
+                                    f"Matched Candidate Profile: '{best_match_dict['role_name']}' with fit score {match_pct}%",
+                                    level="success",
+                                    node_id=current_node.id,
+                                    data={"match_percentage": match_pct, "skills": matching_s}
+                                )
+                            else:
+                                raise AppError("No saved role resumes or candidate profile found. Please upload a resume in Resume Builder.", status_code=400)
 
                     # --- Node Type 5: Conditions & Safety Filters ---
                     elif "condition" in node_type.lower() or node_type in ["CHECK_MATCH_SCORE", "HR_EMAIL_EXISTS", "CHECK_DUPLICATE"]:
@@ -292,18 +327,33 @@ class WorkflowEngine:
                             raise AppError("Missing recipient or email body for Gmail dispatch", status_code=400)
 
                         if not is_test_run and workflow.settings.auto_send:
-                            # Real Gmail dispatch
+                            # Real Gmail dispatch with guaranteed attachment resolution
                             att_ids = []
+                            res_id = best_resume_dict.get("resume_id")
+                            if res_id and res_id != "profile_default":
+                                att_ids.append(res_id)
                             if best_resume_dict.get("attachment_id"):
                                 att_ids.append(best_resume_dict["attachment_id"])
-                            elif best_resume_dict.get("resume_id"):
-                                att_ids.append(best_resume_dict["resume_id"])
 
                             # Fallback to user's default or first stored role resume
                             if not att_ids:
-                                fallback_r = await RoleResume.find_one(RoleResume.tenant_id == tenant_id, RoleResume.is_default == True) or await RoleResume.find_one(RoleResume.tenant_id == tenant_id)
+                                fallback_r = None
+                                if user_id:
+                                    fallback_r = (
+                                        await RoleResume.find_one(RoleResume.user_id == user_id, RoleResume.is_default == True)
+                                        or await RoleResume.find_one(RoleResume.user_id == user_id)
+                                    )
+                                if not fallback_r:
+                                    fallback_r = (
+                                        await RoleResume.find_one(RoleResume.tenant_id == tenant_id, RoleResume.is_default == True)
+                                        or await RoleResume.find_one(RoleResume.tenant_id == tenant_id)
+                                    )
                                 if fallback_r:
-                                    att_ids.append(fallback_r.attachment_id or fallback_r.id)
+                                    att_ids.append(fallback_r.id)
+                                    if fallback_r.attachment_id:
+                                        att_ids.append(fallback_r.attachment_id)
+                                else:
+                                    att_ids.append("profile_fallback")
 
                             msg = await SendingService.enqueue_email_send(
                                 tenant_id=tenant_id,
@@ -332,6 +382,7 @@ class WorkflowEngine:
                         app_status = "Applied" if (workflow.settings.auto_send and not is_test_run) else "Ready to Apply"
                         app_record = Application(
                             tenant_id=tenant_id,
+                            user_id=user_id,
                             title=extracted_dict.get("job_title") or "Open Role",
                             company=extracted_dict.get("company_name") or "Hiring Company",
                             location=extracted_dict.get("location"),

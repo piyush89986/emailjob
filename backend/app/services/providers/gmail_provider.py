@@ -87,10 +87,22 @@ class GmailProvider(EmailProvider):
         # Attach files if any
         if attachments:
             for att in attachments:
-                part = MIMEBase("application", "octet-stream")
-                part.set_payload(att.get("data", b""))
+                raw_payload = att.get("data", b"")
+                if not raw_payload:
+                    continue
+                ctype = att.get("content_type", "application/pdf")
+                fname = att.get("filename", "resume.pdf")
+                if fname.lower().endswith(".pdf") or "pdf" in ctype.lower():
+                    maintype, subtype = "application", "pdf"
+                elif "/" in ctype:
+                    maintype, subtype = ctype.split("/", 1)
+                else:
+                    maintype, subtype = "application", "octet-stream"
+
+                part = MIMEBase(maintype, subtype)
+                part.set_payload(raw_payload)
                 encoders.encode_base64(part)
-                part.add_header("Content-Disposition", f'attachment; filename="{att.get("filename", "attachment")}"')
+                part.add_header("Content-Disposition", f'attachment; filename="{fname}"')
                 msg.attach(part)
 
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")

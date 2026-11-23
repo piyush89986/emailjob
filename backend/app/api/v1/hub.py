@@ -178,7 +178,12 @@ async def prepare_application_from_hub_post(
         raise NotFoundError("Job post not found")
 
     # Locate user's best matching resume from roleResumes
-    resumes = await RoleResume.find(RoleResume.tenant_id == user.tenant_id).to_list()
+    resumes = []
+    if user.id:
+        resumes = await RoleResume.find(RoleResume.user_id == user.id).to_list()
+    if not resumes:
+        resumes = await RoleResume.find(RoleResume.tenant_id == user.tenant_id).to_list()
+
     best_resume: Optional[RoleResume] = None
     if resumes:
         # Check role match first
@@ -189,6 +194,26 @@ async def prepare_application_from_hub_post(
                 break
         if not best_resume:
             best_resume = next((r for r in resumes if r.is_default), resumes[0])
+
+    selected_resume_payload = None
+    if best_resume:
+        selected_resume_payload = {
+            "id": best_resume.id,
+            "role": best_resume.role,
+            "filename": best_resume.filename,
+            "attachment_id": best_resume.attachment_id or best_resume.id
+        }
+    else:
+        # Dynamic Candidate Profile fallback
+        profile = await Profile.find_one(Profile.tenant_id == user.tenant_id)
+        if profile and (profile.name or profile.skills or profile.experience):
+            cand_name = (profile.name or "Candidate").strip()
+            selected_resume_payload = {
+                "id": "profile_default",
+                "role": profile.headline or post.title or "Candidate Profile",
+                "filename": f"{cand_name.replace(' ', '_')}_Resume.pdf",
+                "attachment_id": None
+            }
 
     # Pre-compose application email
     composed = await TemplateMatcher.compose_email(
@@ -207,12 +232,7 @@ async def prepare_application_from_hub_post(
         "title": post.title,
         "company": post.company,
         "hr_email": post.hr_email,
-        "selected_resume": {
-            "id": best_resume.id,
-            "role": best_resume.role,
-            "filename": best_resume.filename,
-            "attachment_id": best_resume.attachment_id
-        } if best_resume else None,
+        "selected_resume": selected_resume_payload,
         "email_draft": composed,
     }
 

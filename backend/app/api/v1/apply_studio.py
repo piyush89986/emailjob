@@ -541,18 +541,36 @@ async def send_application_endpoint(
     att_ids = []
 
     # If resume_id supplied, resolve attachment_id
-    if req.resume_id:
+    if req.resume_id and req.resume_id != "profile_default":
         r = await RoleResume.find_one(RoleResume.id == req.resume_id, RoleResume.tenant_id == tenant_id)
+        if not r and user.id:
+            r = await RoleResume.find_one(RoleResume.id == req.resume_id, RoleResume.user_id == user.id)
         if r:
-            att_ids.append(r.attachment_id or r.id)
+            att_ids.append(r.id)
+            if r.attachment_id:
+                att_ids.append(r.attachment_id)
 
     # If no resume attached yet, fallback to user's default or first stored role resume
     if not att_ids:
-        fallback_r = await RoleResume.find_one(RoleResume.tenant_id == tenant_id, RoleResume.is_default == True) or await RoleResume.find_one(RoleResume.tenant_id == tenant_id)
+        fallback_r = None
+        if user.id:
+            fallback_r = (
+                await RoleResume.find_one(RoleResume.user_id == user.id, RoleResume.is_default == True)
+                or await RoleResume.find_one(RoleResume.user_id == user.id)
+            )
+        if not fallback_r:
+            fallback_r = (
+                await RoleResume.find_one(RoleResume.tenant_id == tenant_id, RoleResume.is_default == True)
+                or await RoleResume.find_one(RoleResume.tenant_id == tenant_id)
+            )
         if fallback_r:
-            att_ids.append(fallback_r.attachment_id or fallback_r.id)
+            att_ids.append(fallback_r.id)
+            if fallback_r.attachment_id:
+                att_ids.append(fallback_r.attachment_id)
             if not req.resume_id:
                 req.resume_id = fallback_r.id
+        else:
+            att_ids.append("profile_fallback")
 
     # Dispatch via Gmail sending service
     msg = await SendingService.enqueue_email_send(
@@ -568,6 +586,7 @@ async def send_application_endpoint(
     poster = await _get_poster(poster_id, tenant_id)
     app_record = Application(
         tenant_id=tenant_id,
+        user_id=user.id,
         title=req.extracted_data.get("job_title", "Open Role") if req.extracted_data else (poster.extracted_data.job_title if poster and poster.extracted_data else "Open Role"),
         company=req.extracted_data.get("company_name", "Company") if req.extracted_data else (poster.extracted_data.company_name if poster and poster.extracted_data else "Company"),
         location=req.extracted_data.get("location") if req.extracted_data else None,

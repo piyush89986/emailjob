@@ -31,7 +31,7 @@ async def list_role_resumes(
     if role:
         items = await repo.find_by_role(role)
     else:
-        items = await repo.list_by_tenant()
+        items = await repo.list_by_user_or_tenant(user.id)
 
     return [
         {
@@ -94,7 +94,10 @@ async def upload_role_resume(
     storage_type = "cloudinary" if cloud_res else "local"
     cloudinary_public_id = cloud_res.get("public_id") if cloud_res else None
 
-    # Always persist file data in StorageService so raw bytes are available for Gmail MIME attachments
+    import base64
+
+    # Always persist file data in StorageService and directly on RoleResume for rock-solid availability
+    b64_data = base64.b64encode(file_bytes).decode("utf-8")
     att = await StorageService.save_attachment(
         tenant_id=user.tenant_id,
         filename=filename,
@@ -108,8 +111,9 @@ async def upload_role_resume(
     if is_default:
         await repo.clear_default_for_role(clean_role)
 
-    # Create record
+    # Create record with direct base64 caching and user_id ownership
     doc = await repo.create(
+        user_id=user.id,
         role=clean_role,
         filename=filename,
         content_type=content_type,
@@ -118,6 +122,7 @@ async def upload_role_resume(
         storage_type=storage_type,
         cloudinary_public_id=cloudinary_public_id,
         attachment_id=attachment_id,
+        data_base64=b64_data,
         is_default=is_default,
         notes=notes
     )
